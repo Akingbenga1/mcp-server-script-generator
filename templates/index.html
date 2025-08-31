@@ -55,6 +55,49 @@
             margin-bottom: 30px;
         }
         
+        .pdf-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+        }
+        
+        .pdf-section h2 {
+            color: white;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+        
+        .pdf-section p {
+            color: rgba(255, 255, 255, 0.9);
+            margin-bottom: 20px;
+        }
+        
+        .pdf-section .input-group label {
+            color: white;
+        }
+        
+        .pdf-section .input-group input,
+        .pdf-section .input-group select {
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            color: white;
+        }
+        
+        .pdf-section .input-group input::placeholder {
+            color: rgba(255, 255, 255, 0.7);
+        }
+        
+        .pdf-section .btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+        }
+        
+        .pdf-section .btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+        
         .form-section h2 {
             color: #333;
             margin-bottom: 20px;
@@ -388,6 +431,37 @@
                             <p><strong>Website Analysis:</strong> Crawls websites to find API endpoints, forms, and documentation</p>
                             <p><strong>GitHub Analysis:</strong> Analyzes public repositories for API code, OpenAPI specs, and documentation</p>
                         </div>
+                    </div>
+                    
+                    <!-- PDF Analysis Form -->
+                    <div class="pdf-section">
+                        <h2>📄 PDF API Documentation Analysis</h2>
+                        <p>Upload PDF files containing API documentation to extract endpoints</p>
+                        
+                        <div class="input-group">
+                            <label for="pdfFile">Select PDF File:</label>
+                            <input type="file" id="pdfFile" accept=".pdf" multiple>
+                        </div>
+                        
+                        <div class="input-group">
+                            <label for="extractorType">Extractor Type:</label>
+                            <select id="extractorType">
+                                <option value="pypdf">PyPDF2 (Faster)</option>
+                                <option value="pdfplumber">PDFPlumber (More Accurate)</option>
+                            </select>
+                        </div>
+                        
+                        <div class="input-group">
+                            <label for="parserType">Parser Type:</label>
+                            <select id="parserType">
+                                <option value="openapi">OpenAPI/Swagger</option>
+                                <option value="markdown">Markdown Documentation</option>
+                            </select>
+                        </div>
+                        
+                        <button class="btn" onclick="analyzePDF()">Analyze PDF</button>
+                        
+                        <div id="pdfResults" class="results-container" style="display: none; margin-top: 20px; background: rgba(255, 255, 255, 0.1); padding: 15px; border-radius: 8px;"></div>
                     </div>
             
             <!-- Loading Indicator -->
@@ -1183,6 +1257,116 @@
                 viewBtn.style.display = 'none';
                 downloadBtn.style.display = 'none';
                 mcpServerSection.style.display = 'none';
+            }
+        }
+        
+        // Function to analyze PDF files
+        async function analyzePDF() {
+            const fileInput = document.getElementById('pdfFile');
+            const extractorType = document.getElementById('extractorType').value;
+            const parserType = document.getElementById('parserType').value;
+            const resultsDiv = document.getElementById('pdfResults');
+            
+            if (!fileInput.files.length) {
+                alert('Please select a PDF file');
+                return;
+            }
+            
+            try {
+                showLoading('Analyzing PDF...');
+                
+                if (fileInput.files.length === 1) {
+                    // Single file analysis
+                    const formData = new FormData();
+                    formData.append('file', fileInput.files[0]);
+                    formData.append('extractor_type', extractorType);
+                    formData.append('parser_type', parserType);
+                    
+                    const response = await fetch('/analyze-pdf', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        // Store session ID for later use
+                        currentSessionId = result.session_id;
+                        
+                        // Display results using existing UI patterns
+                        displayAnalysisResults(result);
+                        
+                        // Show PDF-specific results
+                        resultsDiv.style.display = 'block';
+                        resultsDiv.innerHTML = `
+                            <div class="success-message">
+                                <h3>PDF Analysis Complete!</h3>
+                                <p>📄 File: ${fileInput.files[0].name}</p>
+                                <p>🔍 Endpoints Found: ${result.pdf_analysis.endpoints_found}</p>
+                                <p>🔧 Extraction Method: ${result.pdf_analysis.extraction_method}</p>
+                                <p>🔧 Parser Method: ${result.pdf_analysis.parser_method}</p>
+                                <p>📄 Pages: ${result.pdf_analysis.page_count}</p>
+                                <p>📝 Text Length: ${result.pdf_analysis.text_length} characters</p>
+                            </div>
+                        `;
+                    } else {
+                        showError('PDF analysis failed');
+                    }
+                } else {
+                    // Multiple files analysis
+                    const formData = new FormData();
+                    for (let file of fileInput.files) {
+                        formData.append('files', file);
+                    }
+                    formData.append('extractor_type', extractorType);
+                    formData.append('parser_type', parserType);
+                    
+                    const response = await fetch('/analyze-multiple-pdfs', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        // Display multiple file results
+                        resultsDiv.style.display = 'block';
+                        let html = '<h3>Multiple PDF Analysis Complete!</h3>';
+                        
+                        result.results.forEach(fileResult => {
+                            if (fileResult.success) {
+                                html += `
+                                    <div class="success-message" style="margin-bottom: 15px; padding: 10px; background: rgba(255, 255, 255, 0.1); border-radius: 5px;">
+                                        <p>📄 File: ${fileResult.filename}</p>
+                                        <p>🔍 Endpoints Found: ${fileResult.endpoints_found}</p>
+                                        <p>🔧 Extraction Method: ${fileResult.extraction_method}</p>
+                                        <p>🔧 Parser Method: ${fileResult.parser_method}</p>
+                                        <p>✅ Session ID: ${fileResult.session_id}</p>
+                                    </div>
+                                `;
+                            } else {
+                                html += `
+                                    <div class="error-message" style="margin-bottom: 15px; padding: 10px; background: rgba(255, 0, 0, 0.1); border-radius: 5px;">
+                                        <p>📄 File: ${fileResult.filename}</p>
+                                        <p>❌ Error: ${fileResult.error}</p>
+                                    </div>
+                                `;
+                            }
+                        });
+                        
+                        html += `<p><strong>Total Files:</strong> ${result.total_files}</p>`;
+                        html += `<p><strong>Successful Analyses:</strong> ${result.successful_analyses}</p>`;
+                        
+                        resultsDiv.innerHTML = html;
+                    } else {
+                        showError('Multiple PDF analysis failed');
+                    }
+                }
+            } catch (error) {
+                console.error('PDF analysis failed:', error);
+                showError('PDF analysis failed: ' + error.message);
+            } finally {
+                hideLoading();
             }
         }
         

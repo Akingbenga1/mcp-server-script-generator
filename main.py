@@ -21,6 +21,7 @@ from app.mcp_server_generator import MCPServerGenerator
 from app.chatbot import Chatbot
 from app.models import WebsiteAnalysis, APIDiscovery, ChatMessage, UserSession
 from app.database import Database
+from app.pdf.factories import PDFAnalysisFactory
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -455,6 +456,125 @@ async def analyze_github_repository_endpoint(repo_url: str = Form(...)):
         }
     except Exception as e:
         logger.error(f"Error analyzing GitHub repository: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/analyze-pdf")
+async def analyze_pdf(
+    file: UploadFile = File(...),
+    extractor_type: str = Form("pypdf"),
+    parser_type: str = Form("openapi")
+):
+    """Analyze PDF file for API endpoint definitions"""
+    try:
+        logger.info(f"Analyzing PDF file: {file.filename}")
+        
+        # Create temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
+            content = await file.read()
+            temp_file.write(content)
+            temp_file_path = temp_file.name
+        
+        # Create analysis service
+        analysis_service = PDFAnalysisFactory.create_analysis_service(
+            extractor_type=extractor_type,
+            parser_type=parser_type
+        )
+        
+        # Analyze PDF
+        result = await analysis_service.analyze_pdf(temp_file_path)
+        
+        # Convert to existing format
+        analysis = await analysis_service.convert_to_website_analysis(temp_file_path, result)
+        api_discovery = await analysis_service.convert_to_api_discovery(temp_file_path, result)
+        
+        # Store analysis results
+        session_id = database.create_session(f"pdf://{file.filename}", analysis, api_discovery)
+        
+        # Clean up
+        os.unlink(temp_file_path)
+        
+        return {
+            "success": True,
+            "session_id": session_id,
+            "analysis": analysis.model_dump() if hasattr(analysis, 'model_dump') else analysis.dict(),
+            "api_discovery": api_discovery.model_dump() if hasattr(api_discovery, 'model_dump') else api_discovery.dict(),
+            "pdf_analysis": {
+                "endpoints_found": len(result.endpoints),
+                "extraction_method": result.metadata['extraction_method'],
+                "parser_method": result.metadata['parser_method'],
+                "page_count": result.metadata['page_count'],
+                "text_length": result.metadata['text_length'],
+                "pdf_metadata": result.metadata['pdf_metadata']
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error analyzing PDF: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/analyze-multiple-pdfs")
+async def analyze_multiple_pdfs(
+    files: list[UploadFile] = File(...),
+    extractor_type: str = Form("pypdf"),
+    parser_type: str = Form("openapi")
+):
+    """Analyze multiple PDF files"""
+    try:
+        logger.info(f"Analyzing {len(files)} PDF files")
+        
+        results = []
+        
+        for file in files:
+            try:
+                # Create temporary file
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
+                    content = await file.read()
+                    temp_file.write(content)
+                    temp_file_path = temp_file.name
+                
+                # Create analysis service
+                analysis_service = PDFAnalysisFactory.create_analysis_service(
+                    extractor_type=extractor_type,
+                    parser_type=parser_type
+                )
+                
+                # Analyze PDF
+                result = await analysis_service.analyze_pdf(temp_file_path)
+                
+                # Convert to existing format
+                analysis = await analysis_service.convert_to_website_analysis(temp_file_path, result)
+                api_discovery = await analysis_service.convert_to_api_discovery(temp_file_path, result)
+                
+                # Store analysis results
+                session_id = database.create_session(f"pdf://{file.filename}", analysis, api_discovery)
+                
+                results.append({
+                    'filename': file.filename,
+                    'session_id': session_id,
+                    'success': True,
+                    'endpoints_found': len(result.endpoints),
+                    'extraction_method': result.metadata['extraction_method'],
+                    'parser_method': result.metadata['parser_method']
+                })
+                
+                # Clean up
+                os.unlink(temp_file_path)
+            
+            except Exception as e:
+                logger.error(f"Error analyzing PDF {file.filename}: {e}")
+                results.append({
+                    'filename': file.filename,
+                    'success': False,
+                    'error': str(e)
+                })
+        
+        return {
+            "success": True,
+            "results": results,
+            "total_files": len(files),
+            "successful_analyses": len([r for r in results if r['success']])
+        }
+    except Exception as e:
+        logger.error(f"Error analyzing multiple PDFs: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/mcp-servers")
