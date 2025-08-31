@@ -1,0 +1,1031 @@
+import json
+import os
+import logging
+from typing import Dict, Any, List
+from datetime import datetime
+from pathlib import Path
+
+from .models import APIDiscovery, MCPTool
+
+logger = logging.getLogger(__name__)
+
+class MCPServerGenerator:
+    """Generate MCP server Python code and Dockerfile for GitHub repositories"""
+    
+    def __init__(self, data_dir: str = "data"):
+        self.data_dir = Path(data_dir)
+        self.mcp_servers_dir = self.data_dir / "mcp_servers"
+        self.mcp_servers_dir.mkdir(exist_ok=True)
+        logger.info(f"MCP Servers directory: {self.mcp_servers_dir}")
+    
+    def generate_mcp_server_content(self, github_url: str, api_discovery: APIDiscovery, production_base_url: str = None) -> Dict[str, Any]:
+        """Generate MCP server Python code and Dockerfile content"""
+        try:
+            # Extract repository name from GitHub URL
+            repo_name = self._extract_repo_name(github_url)
+            
+            # Generate Python code
+            python_code = self._generate_python_code(repo_name, api_discovery, production_base_url)
+            
+            # Generate Dockerfile
+            dockerfile_content = self._generate_dockerfile(repo_name)
+            
+            # Generate requirements.txt
+            requirements_content = self._generate_requirements_txt()
+            
+            # Create content structure
+            mcp_content = {
+                "github_url": github_url,
+                "repo_name": repo_name,
+                "generated_at": datetime.now().isoformat(),
+                "python_code": python_code,
+                "dockerfile_content": dockerfile_content,
+                "requirements_txt_content": requirements_content,
+                "endpoints_count": len(api_discovery.endpoints),
+                "tools_count": len(api_discovery.endpoints)  # Each endpoint becomes a tool
+            }
+            
+            # Save to JSON file
+            self._save_mcp_content(repo_name, mcp_content)
+            
+            logger.info(f"Generated MCP server content for {repo_name}")
+            return mcp_content
+            
+        except Exception as e:
+            logger.error(f"Error generating MCP server content: {e}")
+            return {}
+    
+    def _extract_repo_name(self, github_url: str) -> str:
+        """Extract repository name from GitHub URL"""
+        try:
+            # Handle different GitHub URL formats
+            if github_url.endswith('/'):
+                github_url = github_url[:-1]
+            
+            parts = github_url.split('/')
+            if len(parts) >= 2:
+                return f"{parts[-2]}_{parts[-1]}"
+            else:
+                return "unknown_repo"
+        except Exception as e:
+            logger.error(f"Error extracting repo name from {github_url}: {e}")
+            return "unknown_repo"
+    
+    def _generate_python_code(self, repo_name: str, api_discovery: APIDiscovery, production_base_url: str = None) -> str:
+        """Generate Python code for MCP server in FastMCP style"""
+        logger.info(f"Generating Python code for {repo_name} with {len(api_discovery.endpoints)} endpoints")
+        if production_base_url:
+            logger.info(f"Using production base URL: {production_base_url}")
+        
+        # Generate comprehensive server description
+        server_description = self._generate_server_description(repo_name, api_discovery, production_base_url)
+        
+        # Generate tool summary for the main section
+        tool_categories = self._categorize_endpoints(api_discovery.endpoints)
+        tool_summary = self._generate_tool_summary(tool_categories, len(api_discovery.endpoints))
+        
+        logger.info(f"Generated FastMCP-style code with {len(api_discovery.endpoints)} endpoints")
+        
+        python_code = f'''#!/usr/bin/env python3
+"""
+{server_description}
+"""
+
+from fastmcp import FastMCP
+import aiohttp
+import asyncio
+import json
+from typing import Dict, List, Optional, Any
+
+# Initialize the MCP server with FastMCP framework
+mcp = FastMCP(name="{repo_name.replace('-', ' ').replace('_', ' ').title()} MCP Server")
+
+# Base URL for the API
+BASE_URL = "{production_base_url if production_base_url else api_discovery.base_url or 'https://api.example.com'}"
+
+async def make_request(method: str, url: str, data: Dict[str, Any] = None, headers: Dict[str, str] = None) -> Dict[str, Any]:
+    """
+    Helper function to make HTTP requests with comprehensive error handling.
+    
+    Args:
+        method: HTTP method (GET, POST, PUT, DELETE)
+        url: Target URL for the request
+        data: Optional request body data
+        headers: Optional request headers
+        
+    Returns:
+        Dictionary containing status_code, data, and success flag
+    """
+    async with aiohttp.ClientSession() as session:
+        try:
+            if method.upper() == "GET":
+                async with session.get(url, headers=headers) as response:
+                    return {{
+                        "status_code": response.status,
+                        "data": await response.json() if response.content_type == 'application/json' else await response.text(),
+                        "success": 200 <= response.status < 300,
+                        "headers": dict(response.headers)
+                    }}
+            elif method.upper() == "POST":
+                async with session.post(url, json=data, headers=headers) as response:
+                    return {{
+                        "status_code": response.status,
+                        "data": await response.json() if response.content_type == 'application/json' else await response.text(),
+                        "success": 200 <= response.status < 300,
+                        "headers": dict(response.headers)
+                    }}
+            elif method.upper() == "PUT":
+                async with session.put(url, json=data, headers=headers) as response:
+                    return {{
+                        "status_code": response.status,
+                        "data": await response.json() if response.content_type == 'application/json' else await response.text(),
+                        "success": 200 <= response.status < 300,
+                        "headers": dict(response.headers)
+                    }}
+            elif method.upper() == "DELETE":
+                async with session.delete(url, headers=headers) as response:
+                    return {{
+                        "status_code": response.status,
+                        "data": await response.json() if response.content_type == 'application/json' else await response.text(),
+                        "success": 200 <= response.status < 300,
+                        "headers": dict(response.headers)
+                    }}
+            else:
+                return {{
+                    "status_code": 405,
+                    "data": f"Unsupported method: {{method}}",
+                    "success": False
+                }}
+        except Exception as e:
+            return {{
+                "status_code": 500,
+                "data": f"Request failed: {{str(e)}}",
+                "success": False,
+                "error": str(e)
+            }}
+
+# Generic HTTP method tools for flexibility
+@mcp.tool
+def post_request(url: str, data: Dict[str, Any] = None, headers: Dict[str, str] = None) -> Dict[str, Any]:
+    """
+    Make a POST request to the API.
+    
+    This is a generic POST request tool that can be used for any endpoint.
+    For specific endpoints, use the dedicated tools below.
+    
+    Args:
+        url: The full URL for the POST request
+        data: Optional data to send in the request body
+        headers: Optional headers for the request (e.g., {{"Authorization": "Bearer token"}})
+        
+    Returns:
+        Response data including status_code, data, and success flag
+    """
+    return asyncio.run(make_request("POST", url, data, headers))
+
+@mcp.tool
+def get_request(url: str, headers: Dict[str, str] = None) -> Dict[str, Any]:
+    """
+    Make a GET request to the API.
+    
+    This is a generic GET request tool that can be used for any endpoint.
+    For specific endpoints, use the dedicated tools below.
+    
+    Args:
+        url: The full URL for the GET request
+        headers: Optional headers for the request (e.g., {{"Authorization": "Bearer token"}})
+        
+    Returns:
+        Response data including status_code, data, and success flag
+    """
+    return asyncio.run(make_request("GET", url, None, headers))
+
+@mcp.tool
+def put_request(url: str, data: Dict[str, Any] = None, headers: Dict[str, str] = None) -> Dict[str, Any]:
+    """
+    Make a PUT request to the API.
+    
+    This is a generic PUT request tool that can be used for any endpoint.
+    For specific endpoints, use the dedicated tools below.
+    
+    Args:
+        url: The full URL for the PUT request
+        data: Optional data to send in the request body
+        headers: Optional headers for the request (e.g., {{"Authorization": "Bearer token"}})
+        
+    Returns:
+        Response data including status_code, data, and success flag
+    """
+    return asyncio.run(make_request("PUT", url, data, headers))
+
+@mcp.tool
+def delete_request(url: str, headers: Dict[str, str] = None) -> Dict[str, Any]:
+    """
+    Make a DELETE request to the API.
+    
+    This is a generic DELETE request tool that can be used for any endpoint.
+    For specific endpoints, use the dedicated tools below.
+    
+    Args:
+        url: The full URL for the DELETE request
+        headers: Optional headers for the request (e.g., {{"Authorization": "Bearer token"}})
+        
+    Returns:
+        Response data including status_code, data, and success flag
+    """
+    return asyncio.run(make_request("DELETE", url, None, headers))
+
+# Endpoint-specific tools generated from API analysis
+{chr(10).join([self._generate_fastmcp_tool(endpoint, production_base_url) for endpoint in api_discovery.endpoints])}
+
+if __name__ == "__main__":
+    print("\\n" + "="*60)
+    print("{repo_name.replace('-', ' ').replace('_', ' ').title()} MCP Server")
+    print("Using FastMCP Framework Style")
+    print("="*60)
+    print(f"\\nBase URL: {{BASE_URL}}")
+    print(f"Available Tools ({len(api_discovery.endpoints) + 4} total):")
+    print("- Generic HTTP Methods: post_request, get_request, put_request, delete_request")
+{tool_summary}
+    print("\\nStarting server with HTTP transport...")
+    print("="*60)
+    
+    # Run the server with HTTP transport
+    mcp.run(transport="http", port=8000)'''
+        
+        # Validation and cleanup
+        logger.info(f"Generated FastMCP server code with {len(api_discovery.endpoints)} endpoints")
+        
+        try:
+            # Basic syntax validation
+            compile(python_code, '<generated>', 'exec')
+            logger.info("Generated code passed syntax validation")
+        except SyntaxError as e:
+            logger.error(f"Generated code has syntax errors: {e}")
+            # Still return the generated code as it might be partially valid
+        
+        logger.info(f"Generated MCP server code length: {len(python_code)}")
+        return python_code
+
+    def _generate_dockerfile(self, repo_name: str) -> str:
+            else:
+                return CallToolResult(
+                    content=[
+                        TextContent(
+                            type="text",
+                            text=json.dumps({{"error": f"Tool {{name}} not found"}}, indent=2)
+                        )
+                    ]
+                )
+                
+        except Exception as e:
+            logger.error(f"Error calling tool {{name}}: {{e}}")
+            return CallToolResult(
+                content=[
+                    TextContent(
+                        type="text",
+                        text=json.dumps({{"error": str(e)}}, indent=2)
+                    )
+                ]
+            )
+
+{chr(10).join([self._generate_tool_method(endpoint, production_base_url) for endpoint in api_discovery.endpoints])}
+
+    async def _process_response(self, response) -> Dict[str, Any]:
+        """Process HTTP response"""
+        result = {{
+            "status_code": response.status,
+            "success": 200 <= response.status < 300,
+            "url": str(response.url)
+        }}
+        
+        try:
+            result["data"] = await response.json()
+        except:
+            result["data"] = await response.text()
+        
+        return result
+
+async def main():
+    """Main function to run the MCP server"""
+    server = Server("mcp-{repo_name.lower()}")
+    
+    # Create server instance
+    mcp_server = {repo_name.replace('-', '_').replace('.', '_').title()}MCPServer()
+    
+    @server.list_tools()
+    async def handle_list_tools() -> ListToolsResult:
+        """Handle list tools request"""
+        tools = mcp_server.get_tools()
+        return ListToolsResult(tools=tools)
+    
+    @server.call_tool()
+    async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> CallToolResult:
+        """Handle tool call request"""
+        return await mcp_server.call_tool(name, arguments)
+    
+    # Run the server
+    async with stdio_server() as (read_stream, write_stream):
+        await server.run(
+            read_stream,
+            write_stream,
+            InitializationOptions(
+                server_name="mcp-{repo_name.lower()}",
+                server_version="1.0.0",
+                capabilities=server.get_capabilities(
+                    notification_options=None,
+                    experimental_capabilities=None,
+                ),
+            ),
+        )
+    
+    # Cleanup
+    await mcp_server.close_session()
+
+if __name__ == "__main__":
+    asyncio.run(main())
+'''
+        
+        # Temporarily disable validation to debug the issue
+        logger.info("Skipping validation for debugging purposes")
+        
+        # Check if the generated code contains the expected number of tools
+        expected_tools = len(api_discovery.endpoints)
+        tool_count = python_code.count('Tool(')
+        logger.info(f"Generated code contains {tool_count} tools, expected {expected_tools}")
+        
+        if tool_count < expected_tools:
+            logger.warning(f"Generated code has fewer tools than expected. Expected {expected_tools}, found {tool_count}")
+            # Still return the generated code as it might be partially valid
+        
+        logger.info(f"Generated MCP server code length: {len(python_code)}")
+        return python_code
+    
+    def _generate_server_description(self, repo_name: str, api_discovery: APIDiscovery, production_base_url: str = None) -> str:
+        """Generate comprehensive server description"""
+        base_url = production_base_url or api_discovery.base_url or "API"
+        return f"""MCP Server for {repo_name.replace('-', ' ').replace('_', ' ').title()}
+Generated automatically from GitHub repository analysis using enhanced parameter extraction.
+
+This server provides Model Context Protocol (MCP) tools for interacting with the {repo_name} API.
+Each endpoint has been analyzed to extract proper parameter types, sources, and validation rules.
+
+🔧 FEATURES:
+- Automatic parameter detection (path, query, header, cookie, form, body)
+- Type-safe parameter handling with validation
+- Comprehensive error handling and response processing
+- FastMCP framework for optimal performance
+- Production-ready with configurable base URL
+
+🌐 BASE URL: {base_url}
+📊 ENDPOINTS: {len(api_discovery.endpoints)} API endpoints analyzed
+🛠️  TOOLS: {len(api_discovery.endpoints) + 4} total tools available
+
+💡 USAGE:
+Each endpoint is available as both a specific tool (with parameter validation) and via generic HTTP methods.
+Use specific tools for type safety, or generic methods for flexibility.
+
+🔐 AUTHENTICATION:
+Include authentication headers in the 'headers' parameter of any tool call.
+Example: {{"Authorization": "Bearer your-token-here"}}
+
+Generated with enhanced parameter extraction technology."""
+
+    def _categorize_endpoints(self, endpoints) -> Dict[str, List]:
+        """Categorize endpoints by their URL patterns"""
+        categories = {}
+        for endpoint in endpoints:
+            # Extract the first path segment as category
+            path_parts = endpoint.url.strip('/').split('/')
+            category = path_parts[0] if path_parts and path_parts[0] else 'general'
+            
+            # Clean up category name
+            category = category.replace('{', '').replace('}', '')
+            if not category or category.startswith('api'):
+                category = path_parts[1] if len(path_parts) > 1 else 'general'
+            
+            if category not in categories:
+                categories[category] = []
+            categories[category].append(endpoint)
+        
+        return categories
+
+    def _generate_tool_summary(self, categories: Dict[str, List], total_endpoints: int) -> str:
+        """Generate tool summary for the main section"""
+        summary_lines = []
+        for category, endpoints in categories.items():
+            category_name = category.replace('_', ' ').title()
+            endpoint_methods = [ep.method.value for ep in endpoints]
+            method_counts = {method: endpoint_methods.count(method) for method in set(endpoint_methods)}
+            method_summary = ", ".join([f"{method}({count})" for method, count in method_counts.items()])
+            summary_lines.append(f"- {category_name}: {method_summary}")
+        
+        return "\n".join(summary_lines)
+
+    def _generate_fastmcp_tool(self, endpoint, production_base_url: str = None) -> str:
+        """Generate FastMCP-style tool for an endpoint"""
+        # Clean tool name
+        tool_name = f"{endpoint.method.value.lower()}_{endpoint.url.replace('/', '_').replace('{', '').replace('}', '').replace('-', '_')}"
+        
+        # Generate comprehensive description
+        description = f'''{endpoint.method.value} request to {endpoint.url}
+    
+{endpoint.description or f"Execute {endpoint.method.value} operation on {endpoint.url}"}
+
+Args:'''
+        
+        # Add parameter documentation
+        if hasattr(endpoint, 'parameters') and endpoint.parameters:
+            for param_name, param_info in endpoint.parameters.items():
+                param_type = param_info.get('type', 'str')
+                param_source = param_info.get('source', 'unknown')
+                param_desc = param_info.get('description', f'{param_name} parameter')
+                
+                # Map parameter types
+                python_type = {
+                    'string': 'str', 'integer': 'int', 'boolean': 'bool',
+                    'array': 'List[str]', 'object': 'Dict[str, Any]', 'float': 'float'
+                }.get(param_type, 'str')
+                
+                description += f'''
+        {param_name}: {python_type} - {param_desc} ({param_source} parameter)'''
+        
+        description += '''
+        headers: Optional headers for the request (e.g., {{"Authorization": "Bearer token"}})
+
+Returns:
+        Response data including status_code, data, success flag, and headers'''
+        
+        # Generate function signature
+        func_params = []
+        if hasattr(endpoint, 'parameters') and endpoint.parameters:
+            for param_name, param_info in endpoint.parameters.items():
+                param_type = param_info.get('type', 'str')
+                python_type = {
+                    'string': 'str', 'integer': 'int', 'boolean': 'bool',
+                    'array': 'List[str]', 'object': 'Dict[str, Any]', 'float': 'float'
+                }.get(param_type, 'str')
+                
+                required = param_info.get('required', True)
+                if required:
+                    func_params.append(f"{param_name}: {python_type}")
+                else:
+                    func_params.append(f"{param_name}: Optional[{python_type}] = None")
+        
+        func_params.append("headers: Dict[str, str] = None")
+        func_signature = ", ".join(func_params)
+        
+        # Generate URL construction
+        if production_base_url:
+            url_base = f'"{production_base_url.rstrip("/")}"'
+        else:
+            url_base = 'BASE_URL'
+            
+        # Build URL with path parameters
+        url_template = endpoint.url
+        if hasattr(endpoint, 'parameters') and endpoint.parameters:
+            for param_name, param_info in endpoint.parameters.items():
+                if param_info.get('source') == 'path':
+                    url_template = url_template.replace(f'{{{param_name}}}', f'{{{param_name}}}')
+        
+        url_construction = f'url = f"{url_base}{url_template}"'
+        
+        # Generate data preparation
+        data_prep = []
+        if hasattr(endpoint, 'parameters') and endpoint.parameters:
+            has_body = any(p.get('source') == 'body' for p in endpoint.parameters.values())
+            has_query = any(p.get('source') == 'query' for p in endpoint.parameters.values())
+            
+            if has_body and endpoint.method.value in ['POST', 'PUT', 'PATCH']:
+                body_params = [name for name, info in endpoint.parameters.items() if info.get('source') == 'body']
+                if body_params:
+                    body_dict = '{' + ', '.join([f'"{p}": {p}' for p in body_params]) + '}'
+                    data_prep.append(f"data = {body_dict}")
+                    data_prep.append("data = {{k: v for k, v in data.items() if v is not None}}")
+        
+        data_prep_code = '\n    '.join(data_prep) if data_prep else ""
+        
+        # Generate method call
+        if endpoint.method.value in ['POST', 'PUT', 'PATCH'] and data_prep:
+            method_call = f'return asyncio.run(make_request("{endpoint.method.value}", url, data, headers))'
+        else:
+            method_call = f'return asyncio.run(make_request("{endpoint.method.value}", url, None, headers))'
+        
+        # Combine everything
+        tool_code = f'''@mcp.tool
+def {tool_name}({func_signature}) -> Dict[str, Any]:
+    """
+    {description}
+    """
+    {url_construction}'''
+        
+        if data_prep_code:
+            tool_code += f'''
+    {data_prep_code}'''
+            
+        tool_code += f'''
+    {method_call}'''
+        
+        return tool_code
+
+    def _generate_endpoint_code(self, endpoint, production_base_url: str = None) -> str:
+        """Generate code for a single endpoint"""
+        # Clean tool name: replace hyphens with underscores, remove invalid characters
+        tool_name = f"{endpoint.method.value.lower()}_{endpoint.url.replace('/', '_').replace('{', '').replace('}', '').replace('-', '_')}"
+        
+        # Use raw string for description to handle Windows paths properly
+        description = endpoint.description or f"{endpoint.method.value} {endpoint.url}"
+        if '\\' in description:
+            description = f"r\"{description}\""
+        else:
+            description = f"\"{description}\""
+        
+        # Generate proper input schema from endpoint parameters
+        input_schema = self._generate_input_schema(endpoint)
+        
+        return f'''            Tool(
+                name="{tool_name}",
+                description={description},
+                inputSchema={input_schema}
+            ),'''
+    
+    def _generate_input_schema(self, endpoint) -> str:
+        """Generate input schema from endpoint parameters"""
+        properties = {}
+        required = []
+        
+        # Check if endpoint has parameters
+        if hasattr(endpoint, 'parameters') and endpoint.parameters:
+            # Handle both enhanced endpoint objects and standard APIEndpoint objects
+            if isinstance(endpoint.parameters, list):
+                # Enhanced endpoint with ParameterInfo objects
+                for param in endpoint.parameters:
+                    param_type = self._get_parameter_type(param)
+                    param_description = getattr(param, 'description', f'{param.name} parameter')
+                    properties[param.name] = {
+                        "type": param_type,
+                        "description": param_description
+                    }
+                    if getattr(param, 'required', True):
+                        required.append(param.name)
+            elif isinstance(endpoint.parameters, dict):
+                # Standard APIEndpoint with dictionary parameters
+                for param_name, param_info in endpoint.parameters.items():
+                    if isinstance(param_info, dict):
+                        param_type = param_info.get('type', 'string')
+                        param_description = param_info.get('description', f'{param_name} parameter')
+                        properties[param_name] = {
+                            "type": param_type,
+                            "description": param_description
+                        }
+                        if param_info.get('required', True):
+                            required.append(param_name)
+                    else:
+                        # Simple string parameter
+                        properties[param_name] = {
+                            "type": "string",
+                            "description": f'{param_name} parameter'
+                        }
+                        required.append(param_name)
+        
+        # If no parameters were extracted, fall back to basic URL parameter
+        if not properties:
+            properties = {
+                "url": {
+                            "type": "string",
+                            "description": "Full URL for the request"
+                }
+            }
+            required = ["url"]
+        
+        # Convert to JSON string format
+        properties_json = json.dumps(properties, indent=20)
+        required_json = json.dumps(required, indent=20)
+        
+        return f"""{{
+                    "type": "object",
+                    "properties": {properties_json},
+                    "required": {required_json}
+                }}"""
+    
+    def _generate_tool_method(self, endpoint, production_base_url: str = None) -> str:
+        """Generate method code for a single endpoint"""
+        # Clean method name: replace hyphens with underscores, remove invalid characters
+        method_name = f"{endpoint.method.value.lower()}_{endpoint.url.replace('/', '_').replace('{', '').replace('}', '').replace('-', '_')}"
+        
+        # Use production base URL if provided, otherwise use configurable base_url
+        if production_base_url:
+            default_url = f'"{production_base_url.rstrip("/")}{endpoint.url}"'
+        else:
+            default_url = f'f"{{self.base_url}}{endpoint.url}"'
+        
+        return f'''    async def _call_{method_name}(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute {endpoint.method.value} {endpoint.url}"""
+        try:
+            url = arguments.get("url", {default_url})
+            
+            if "{endpoint.method.value}" in ["POST", "PUT", "PATCH"]:
+                async with self.session.request(
+                    method="{endpoint.method.value}",
+                    url=url,
+                    json=arguments.get("data", {{}}),
+                    timeout=30
+                ) as response:
+                    return await self._process_response(response)
+            else:
+                async with self.session.request(
+                    method="{endpoint.method.value}",
+                    url=url,
+                    params=arguments.get("params", {{}}),
+                    timeout=30
+                ) as response:
+                    return await self._process_response(response)
+                    
+        except Exception as e:
+            logger.error(f"Error in {method_name}: {{e}}")
+            return {{"error": str(e), "success": False}}'''
+    
+    def _generate_dockerfile(self, repo_name: str) -> str:
+        """Generate Dockerfile content"""
+        return f'''# Dockerfile for MCP Server - {repo_name}
+FROM python:3.11-slim
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \\
+    gcc \\
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements
+COPY requirements.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy MCP server code
+COPY mcp_server.py .
+
+# Make the script executable
+RUN chmod +x mcp_server.py
+
+# Expose port (if needed for HTTP server)
+# EXPOSE 8000
+
+# Run the MCP server
+CMD ["python", "mcp_server.py"]
+'''
+    
+    def _validate_generated_code(self, python_code: str) -> bool:
+        """Validate generated Python code for syntax errors and compliance with guidelines"""
+        try:
+            # Only check for truly critical syntax issues
+            critical_checks = [
+                # Check for missing commas in dictionaries (critical)
+                ('}\n{', 'missing commas in dictionary definitions'),
+                # Check for incorrect arrow notation (critical)
+                ('_>', 'incorrect arrow notation - should be ->'),
+            ]
+            
+            # Check for critical issues
+            for pattern, description in critical_checks:
+                if pattern in python_code:
+                    logger.error(f"Critical issue found: {description}")
+                    return False
+            
+            # Try to compile the code to catch syntax errors
+            compile(python_code, '<generated_mcp_server>', 'exec')
+            logger.info("Generated MCP server code passed syntax validation")
+            return True
+            
+        except SyntaxError as e:
+            logger.error(f"Syntax error in generated code: {e}")
+            logger.error(f"Error location: line {e.lineno}, column {e.offset}")
+            # Log a snippet of the problematic code
+            lines = python_code.split('\n')
+            if e.lineno <= len(lines):
+                start_line = max(0, e.lineno - 2)
+                end_line = min(len(lines), e.lineno + 2)
+                logger.error(f"Code around error:")
+                for i in range(start_line, end_line):
+                    marker = ">>> " if i == e.lineno - 1 else "    "
+                    logger.error(f"{marker}{i+1}: {lines[i]}")
+            return False
+        except Exception as e:
+            logger.error(f"Validation error: {e}")
+            return False
+
+    def _generate_basic_mcp_template(self, repo_name: str, api_discovery: APIDiscovery) -> str:
+        """Generate a basic MCP server template when validation fails"""
+        return f'''#!/usr/bin/env python3
+"""
+MCP Server for {repo_name}
+Generated automatically from GitHub repository analysis
+(Basic template - validation failed)
+"""
+
+import asyncio
+import json
+import logging
+from typing import Any, Dict, List, Optional
+from mcp.server import Server
+from mcp.server.models import InitializationOptions
+from mcp.server.stdio import stdio_server
+from mcp.types import (
+    CallToolRequest,
+    CallToolResult,
+    ListToolsRequest,
+    ListToolsResult,
+    Tool,
+    TextContent,
+    ImageContent,
+    EmbeddedResource,
+)
+import aiohttp
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+class {repo_name.replace('-', '_').replace('.', '_').title()}MCPServer:
+    """MCP Server for {repo_name} API endpoints"""
+    
+    def __init__(self):
+        self.base_url = "{production_base_url if production_base_url else api_discovery.base_url}"
+        self.session = None
+    
+    async def initialize_session(self):
+        """Initialize aiohttp session"""
+        if not self.session:
+            self.session = aiohttp.ClientSession(
+                headers={{
+                    'Content-Type': 'application/json',
+                    'User-Agent': 'MCP-Server/{repo_name}/1.0'
+                }}
+            )
+    
+    async def close_session(self):
+        """Close aiohttp session"""
+        if self.session:
+            await self.session.close()
+            self.session = None
+    
+    def get_tools(self) -> List[Tool]:
+        """Return list of available tools"""
+        return [
+            Tool(
+                name="basic_api_call",
+                description="Basic API call to {repo_name}",
+                inputSchema={{
+                    "type": "object",
+                    "properties": {{
+                        "url": {{
+                            "type": "string",
+                            "description": "Full URL for the request"
+                        }},
+                        "method": {{
+                            "type": "string",
+                            "description": "HTTP method (GET, POST, PUT, DELETE)",
+                            "default": "GET"
+                        }}
+                    }},
+                    "required": ["url"]
+                }}
+            )
+        ]
+    
+    async def call_tool(self, name: str, arguments: Dict[str, Any]) -> CallToolResult:
+        """Execute a tool call"""
+        try:
+            await self.initialize_session()
+            
+            if name == "basic_api_call":
+                url = arguments.get("url", self.base_url)
+                method = arguments.get("method", "GET")
+                
+                async with self.session.request(
+                    method=method,
+                    url=url,
+                    json=arguments.get("data", {{}}),
+                    timeout=30
+                ) as response:
+                    result = await self._process_response(response)
+                    return CallToolResult(
+                        content=[
+                            TextContent(
+                                type="text",
+                                text=json.dumps(result, indent=2)
+                            )
+                        ]
+                    )
+            else:
+                return CallToolResult(
+                    content=[
+                        TextContent(
+                            type="text",
+                            text=json.dumps({{"error": f"Tool {{name}} not found"}}, indent=2)
+                        )
+                    ]
+                )
+                
+        except Exception as e:
+            logger.error(f"Error calling tool {{name}}: {{e}}")
+            return CallToolResult(
+                content=[
+                    TextContent(
+                        type="text",
+                        text=json.dumps({{"error": str(e)}}, indent=2)
+                    )
+                ]
+            )
+
+    async def _process_response(self, response) -> Dict[str, Any]:
+        """Process HTTP response"""
+        result = {{
+            "status_code": response.status,
+            "success": 200 <= response.status < 300,
+            "url": str(response.url)
+        }}
+        
+        try:
+            result["data"] = await response.json()
+        except:
+            result["data"] = await response.text()
+        
+        return result
+
+async def main():
+    """Main function to run the MCP server"""
+    server = Server("mcp-{repo_name.lower()}")
+    
+    # Create server instance
+    mcp_server = {repo_name.replace('-', '_').replace('.', '_').title()}MCPServer()
+    
+    @server.list_tools()
+    async def handle_list_tools() -> ListToolsResult:
+        """Handle list tools request"""
+        tools = mcp_server.get_tools()
+        return ListToolsResult(tools=tools)
+    
+    @server.call_tool()
+    async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> CallToolResult:
+        """Handle tool call request"""
+        return await mcp_server.call_tool(name, arguments)
+    
+    # Run the server
+    async with stdio_server() as (read_stream, write_stream):
+        await server.run(
+            read_stream,
+            write_stream,
+            InitializationOptions(
+                server_name="mcp-{repo_name.lower()}",
+                server_version="1.0.0",
+                capabilities=server.get_capabilities(
+                    notification_options=None,
+                    experimental_capabilities=None,
+                ),
+            ),
+        )
+    
+    # Cleanup
+    await mcp_server.close_session()
+
+if __name__ == "__main__":
+    asyncio.run(main())
+'''
+
+    def _get_code_generation_guidelines(self) -> str:
+        """Get comprehensive guidelines for Python code generation"""
+        return """
+        PYTHON CODE GENERATION GUIDELINES:
+        
+        1. File Paths and Strings:
+           - ALWAYS use raw strings (r"...") for Windows file paths containing backslashes
+           - Example: description=r"Extracted from app\\api\\documents\\documents.py"
+           - NEVER use regular strings with backslashes: "app\\api\\documents\\documents.py" ❌
+        
+        2. Function Names and Identifiers:
+           - Use ONLY underscores (_) for word separation in function names, variable names, and identifiers
+           - NEVER use hyphens (-) in Python identifiers
+           - Examples:
+             ✅ _call_post__protected_update_settings
+             ❌ _call_post__protected_update-settings
+        
+        3. Dictionary Syntax:
+           - ALWAYS include commas between key-value pairs in dictionaries
+           - Example:
+             ✅ tool_map = {
+                 "key1": value1,
+                 "key2": value2,
+                 "key3": value3
+             }
+             ❌ tool_map = {
+                 "key1": value1
+                 "key2": value2
+                 "key3": value3
+             }
+        
+        4. Type Annotations:
+           - Use proper arrow operator (->) for return type annotations
+           - Example: async def function_name(self, args: Dict[str, Any]) -> Dict[str, Any]:
+           - NEVER use underscore-arrow (_>) or other variations
+        
+        5. String Escaping:
+           - For Windows paths in strings, use either:
+             a) Raw strings: r"path\\to\\file"
+             b) Forward slashes: "path/to/file" (Python handles this on Windows)
+             c) Double backslashes: "path\\\\to\\\\file"
+        
+        6. Code Validation Checklist:
+           Before providing the final code, verify:
+           □ All file paths use raw strings or forward slashes
+           □ All function names use underscores only (no hyphens)
+           □ All dictionaries have proper commas
+           □ All type annotations use -> (not _>)
+           □ No invalid escape sequences in strings
+        
+        7. Error Prevention:
+           - Test for common Python syntax errors:
+             - Unicode escape sequence errors
+             - Invalid identifier names
+             - Missing commas in data structures
+             - Incorrect type annotation syntax
+        """
+
+    def _generate_requirements_txt(self) -> str:
+        """Generate requirements.txt content with all necessary packages for FastMCP server"""
+        return '''# Requirements for FastMCP Server
+# FastMCP framework (replaces standard MCP packages)
+fastmcp>=0.9.0
+
+# HTTP client for API calls
+aiohttp>=3.8.0
+
+# Async support
+asyncio
+
+# JSON handling
+json5>=0.9.0
+
+# Logging
+structlog>=23.0.0
+
+# Type hints support
+typing-extensions>=4.0.0
+
+# Optional: Additional packages for enhanced functionality
+# requests>=2.28.0  # Alternative HTTP client
+# httpx>=0.24.0     # Modern HTTP client
+# pydantic>=2.0.0   # Data validation
+# python-dotenv>=1.0.0  # Environment variables
+'''
+    
+    def _save_mcp_content(self, repo_name: str, mcp_content: Dict[str, Any]):
+        """Save MCP content to JSON file"""
+        try:
+            filename = f"{repo_name}_mcp_server.json"
+            filepath = self.mcp_servers_dir / filename
+            
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(mcp_content, f, indent=2, ensure_ascii=False)
+            
+            logger.info(f"Saved MCP server content to {filepath}")
+            
+        except Exception as e:
+            logger.error(f"Error saving MCP content: {e}")
+    
+    def get_mcp_content(self, repo_name: str) -> Dict[str, Any]:
+        """Retrieve MCP content for a repository"""
+        try:
+            filename = f"{repo_name}_mcp_server.json"
+            filepath = self.mcp_servers_dir / filename
+            
+            logger.info(f"Looking for MCP content file: {filepath}")
+            
+            if filepath.exists():
+                logger.info(f"Found MCP content file: {filepath}")
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    content = json.load(f)
+                    logger.info(f"Loaded MCP content with keys: {list(content.keys())}")
+                    logger.info(f"Python code length: {len(content.get('python_code', ''))}")
+                    return content
+            else:
+                logger.warning(f"MCP content file not found: {filepath}")
+                return {}
+                
+        except Exception as e:
+            logger.error(f"Error retrieving MCP content: {e}")
+            return {}
+    
+    def list_mcp_servers(self) -> List[str]:
+        """List all available MCP servers"""
+        try:
+            servers = []
+            for file in self.mcp_servers_dir.glob("*_mcp_server.json"):
+                repo_name = file.stem.replace("_mcp_server", "")
+                servers.append(repo_name)
+            return servers
+        except Exception as e:
+            logger.error(f"Error listing MCP servers: {e}")
+            return []

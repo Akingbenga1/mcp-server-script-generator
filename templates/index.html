@@ -1,0 +1,1259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Website MCP Chatbot Prototype</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+        
+        .main-content {
+            padding: 30px;
+        }
+        
+        .form-section {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+        }
+        
+        .form-section h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+        
+        .input-group {
+            margin-bottom: 20px;
+        }
+        
+        .input-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #555;
+        }
+        
+        .input-group input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s ease;
+        }
+        
+        .input-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+        
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .btn-secondary {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 12px;
+            margin-top: 16px;
+        }
+        
+        .help-text {
+            margin-top: 16px;
+            padding: 16px;
+            background: rgba(102, 126, 234, 0.1);
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .help-text p {
+            margin: 8px 0;
+            font-size: 14px;
+            color: #555;
+        }
+        
+        .results-section {
+            margin-top: 30px;
+        }
+        
+        .results-section h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+        
+        .result-card {
+            background: white;
+            border: 1px solid #e1e5e9;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        
+        .result-card h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+        }
+        
+        .chat-section {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 10px;
+            margin-top: 30px;
+        }
+        
+        .chat-container {
+            height: 400px;
+            border: 1px solid #e1e5e9;
+            border-radius: 8px;
+            background: white;
+            overflow-y: auto;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .message {
+            margin-bottom: 15px;
+            padding: 10px 15px;
+            border-radius: 8px;
+            max-width: 80%;
+        }
+        
+        .message.user {
+            background: #667eea;
+            color: white;
+            margin-left: auto;
+        }
+        
+        .message.bot {
+            background: #f1f3f4;
+            color: #333;
+        }
+        
+        .chat-input {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .chat-input input {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+        
+        .loading.show {
+            display: block;
+        }
+        
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        .endpoint-list {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .endpoint-item {
+            background: white;
+            border: 1px solid #e1e5e9;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .endpoint-info {
+            flex: 1;
+        }
+        
+        .endpoint-method {
+            background: #667eea;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-right: 10px;
+        }
+        
+        .endpoint-url {
+            font-family: monospace;
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .pagination-controls {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin: 20px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        
+        .pagination-info {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .pagination-btn {
+            background: #667eea;
+            color: white;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+        
+        .pagination-btn:hover {
+            background: #5a6fd8;
+        }
+        
+        .pagination-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .endpoint-count {
+            background: #e3f2fd;
+            color: #1976d2;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            display: inline-block;
+        }
+        
+        .endpoint-filters {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        
+        .filter-btn {
+            background: #f0f0f0;
+            color: #333;
+            padding: 6px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .filter-btn.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+        
+        .filter-btn:hover {
+            background: #e0e0e0;
+        }
+        
+        .filter-btn.active:hover {
+            background: #5a6fd8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🌐 Website MCP Chatbot</h1>
+            <p>Analyze websites, discover APIs, and create intelligent chatbots with MCP tools</p>
+        </div>
+        
+        <div class="main-content">
+                    <!-- MCP Configuration Form -->
+                    <div class="form-section">
+                        <h2>⚙️ MCP Server Configuration</h2>
+                        <div class="input-group">
+                            <label for="production-base-url">Production API Base URL:</label>
+                            <input type="url" id="production-base-url" placeholder="https://api.example.com/v1" value="">
+                        </div>
+                        <div class="help-text">
+                            <p><strong>Production Base URL:</strong> The base URL for the production API that the generated MCP server will call. This will replace placeholder URLs in the generated tools.</p>
+                            <p><strong>Example:</strong> If your API is hosted at https://api.myapp.com/v1, enter that URL here.</p>
+                        </div>
+                    </div>
+
+                                <!-- Website Analysis Form -->
+                    <div class="form-section">
+                        <h2>🔍 Analyze Website or GitHub Repository</h2>
+                        <div class="input-group">
+                            <label for="website-url">Website URL or GitHub Repository:</label>
+                            <input type="url" id="website-url" placeholder="https://example.com or https://github.com/owner/repo" required>
+                        </div>
+                        <div class="button-group">
+                            <button class="btn" onclick="analyzeWebsite()">Analyze Website</button>
+                            <button class="btn btn-secondary" onclick="analyzeGitHub()">Analyze GitHub Repo</button>
+                        </div>
+                        <div class="help-text">
+                            <p><strong>Website Analysis:</strong> Crawls websites to find API endpoints, forms, and documentation</p>
+                            <p><strong>GitHub Analysis:</strong> Analyzes public repositories for API code, OpenAPI specs, and documentation</p>
+                        </div>
+                    </div>
+            
+            <!-- Loading Indicator -->
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>Analyzing website and discovering APIs...</p>
+            </div>
+            
+            <!-- Results Section -->
+            <div class="results-section hidden" id="results-section">
+                <h2>📊 Analysis Results</h2>
+                
+                <div class="result-card">
+                    <h3>🌐 Website Information</h3>
+                    <p><strong>URL:</strong> <span id="website-url-display"></span></p>
+                    <p><strong>Title:</strong> <span id="website-title"></span></p>
+                    <p><strong>Description:</strong> <span id="website-description"></span></p>
+                </div>
+                
+                <div class="result-card">
+                    <h3>🔗 Discovered API Endpoints</h3>
+                    <div class="endpoint-count" id="endpoint-count"></div>
+                    <div class="endpoint-filters" id="endpoint-filters"></div>
+                    <ul class="endpoint-list" id="endpoints-list"></ul>
+                    <div class="pagination-controls" id="pagination-controls" style="display: none;">
+                        <button class="pagination-btn" id="prev-btn" onclick="previousPage()">Previous</button>
+                        <span class="pagination-info" id="pagination-info"></span>
+                        <button class="pagination-btn" id="next-btn" onclick="nextPage()">Next</button>
+                    </div>
+                </div>
+                
+                <div class="result-card">
+                    <h3>🛠️ MCP Tools Generated</h3>
+                    <p><strong>Total Tools:</strong> <span id="mcp-tools-count">0</span></p>
+                    <button class="btn" onclick="generateMCPTools()">Generate MCP Tools</button>
+                </div>
+                
+                <div class="result-card" id="mcp-server-section" style="display: none;">
+                    <h3>🚀 MCP Server Generated</h3>
+                    <p><strong>Status:</strong> <span id="mcp-server-status">Not generated</span></p>
+                    <p><strong>Repository:</strong> <span id="mcp-server-repo">-</span></p>
+                    <p><strong>Generated At:</strong> <span id="mcp-server-time">-</span></p>
+                    <div class="mcp-server-actions">
+                        <button class="btn" onclick="viewMCPServerContent()" id="view-mcp-server-btn" style="display: none;">View MCP Server Content</button>
+                        <button class="btn btn-secondary" onclick="downloadMCPFiles()" id="download-mcp-files-btn" style="display: none;">Download Files</button>
+                        <button class="btn" onclick="listAllMCPServers()">List All MCP Servers</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Chat Section -->
+            <div class="chat-section hidden" id="chat-section">
+                <h2>💬 Chat with Website</h2>
+                <div class="chat-container" id="chat-container">
+                    <div class="message bot">
+                        Hello! I'm your website assistant. I can help you interact with this website. What would you like to do?
+                    </div>
+                </div>
+                <div class="chat-input">
+                    <input type="text" id="chat-input" placeholder="Type your message..." onkeypress="handleChatKeyPress(event)">
+                    <button class="btn" onclick="sendMessage()">Send</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentSessionId = null;
+        let websocket = null;
+        
+        // Pagination variables
+        let allEndpoints = [];
+        let currentPage = 0;
+        let endpointsPerPage = 50;
+        let currentFilter = 'all';
+        
+        async function analyzeWebsite() {
+            const url = document.getElementById('website-url').value;
+            if (!url) {
+                alert('Please enter a website URL');
+                return;
+            }
+            
+            // Show loading
+            document.getElementById('loading').classList.add('show');
+            
+            try {
+                const formData = new FormData();
+                formData.append('url', url);
+                
+                const response = await fetch('/analyze-website', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    currentSessionId = result.session_id;
+                    displayResults(result);
+                    document.getElementById('results-section').classList.remove('hidden');
+                } else {
+                    alert('Error analyzing website: ' + result.detail);
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            } finally {
+                document.getElementById('loading').classList.remove('show');
+            }
+        }
+        
+        async function analyzeGitHub() {
+            const url = document.getElementById('website-url').value;
+            if (!url) {
+                alert('Please enter a GitHub repository URL');
+                return;
+            }
+            
+            if (!url.includes('github.com')) {
+                alert('Please enter a valid GitHub repository URL');
+                return;
+            }
+            
+            // Show loading
+            document.getElementById('loading').classList.add('show');
+            
+            try {
+                const formData = new FormData();
+                formData.append('repo_url', url);
+                
+                const response = await fetch('/analyze-github', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    currentSessionId = result.session_id;
+                    displayGitHubResults(result);
+                    document.getElementById('results-section').classList.remove('hidden');
+                } else {
+                    alert('Error analyzing GitHub repository: ' + result.detail);
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            } finally {
+                document.getElementById('loading').classList.remove('show');
+            }
+        }
+        
+        function displayGitHubResults(result) {
+            const analysis = result.analysis;
+            const apiDiscovery = result.api_discovery;
+            const githubAnalysis = result.github_analysis;
+            
+            // Display repository info
+            document.getElementById('website-url-display').textContent = analysis.url;
+            document.getElementById('website-title').textContent = analysis.title || 'N/A';
+            document.getElementById('website-description').textContent = analysis.description || 'N/A';
+            
+            // Store all endpoints for pagination
+            allEndpoints = apiDiscovery.endpoints || [];
+            currentPage = 0;
+            
+            // Display endpoints with pagination
+            displayEndpointsWithPagination();
+            
+            // Add GitHub-specific information to the results
+            const githubInfo = document.createElement('div');
+            githubInfo.className = 'result-card';
+            githubInfo.innerHTML = `
+                <h3>📚 GitHub Repository Information</h3>
+                <p><strong>Languages:</strong> ${githubAnalysis.languages ? githubAnalysis.languages.join(', ') : 'Unknown'}</p>
+                <p><strong>Topics:</strong> ${githubAnalysis.topics ? githubAnalysis.topics.join(', ') : 'None'}</p>
+                <p><strong>Documentation Files:</strong> ${githubAnalysis.documentation_files ? githubAnalysis.documentation_files.length : 0}</p>
+                <p><strong>Code Files Analyzed:</strong> ${githubAnalysis.code_files ? githubAnalysis.code_files.length : 0}</p>
+                <p><strong>OpenAPI Specifications:</strong> ${githubAnalysis.openapi_specs ? githubAnalysis.openapi_specs.length : 0}</p>
+            `;
+            
+            // Insert after the first result card
+            const resultsSection = document.getElementById('results-section');
+            const firstCard = resultsSection.querySelector('.result-card');
+            if (firstCard) {
+                firstCard.parentNode.insertBefore(githubInfo, firstCard.nextSibling);
+            }
+        }
+        
+        function displayResults(result) {
+            const analysis = result.analysis;
+            const apiDiscovery = result.api_discovery;
+            
+            // Display website info
+            document.getElementById('website-url-display').textContent = analysis.url;
+            document.getElementById('website-title').textContent = analysis.title || 'N/A';
+            document.getElementById('website-description').textContent = analysis.description || 'N/A';
+            
+            // Store all endpoints for pagination
+            allEndpoints = apiDiscovery.endpoints || [];
+            currentPage = 0;
+            
+            // Display endpoints with pagination
+            displayEndpointsWithPagination();
+            
+            // Check if this is a GitHub repository and show MCP server section
+            const currentUrl = document.getElementById('website-url').value;
+            if (currentUrl && currentUrl.includes('github.com')) {
+                // Show MCP server section for GitHub repositories
+                const mcpServerSection = document.getElementById('mcp-server-section');
+                mcpServerSection.style.display = 'block';
+                
+                // Check if MCP server was already generated during analysis
+                if (result.mcp_server_generated) {
+                    // Try to get the MCP server content to display
+                    const urlParts = currentUrl.split('/');
+                    const repoName = `${urlParts[urlParts.length - 2]}_${urlParts[urlParts.length - 1]}`;
+                    
+                    fetch(`/mcp-server/${repoName}`)
+                        .then(response => response.json())
+                        .then(mcpResult => {
+                            if (mcpResult.success) {
+                                updateMCPServerSection(mcpResult);
+                            }
+                        })
+                        .catch(error => {
+                            console.log('Could not retrieve MCP server content:', error);
+                        });
+                }
+            }
+        }
+        
+        async function generateMCPTools() {
+            if (!currentSessionId) {
+                alert('Please analyze a website first');
+                return;
+            }
+            
+            try {
+                // Show loading state
+                const generateBtn = document.querySelector('button[onclick="generateMCPTools()"]');
+                const originalText = generateBtn.textContent;
+                generateBtn.textContent = 'Generating...';
+                generateBtn.disabled = true;
+                
+                // Get production base URL from input
+                const productionBaseUrl = document.getElementById('production-base-url').value.trim();
+                
+                // Generate MCP tools
+                const response = await fetch('/generate-mcp-tools', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ 
+                        session_id: currentSessionId,
+                        production_base_url: productionBaseUrl || null
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    document.getElementById('mcp-tools-count').textContent = result.mcp_tools.length;
+                    
+                    // Check if this is a GitHub repository and generate MCP server content
+                    const currentUrl = document.getElementById('website-url').value;
+                    if (currentUrl && currentUrl.includes('github.com')) {
+                        try {
+                            console.log('GitHub repository detected, generating MCP server content...');
+                            
+                            // Generate MCP server content for GitHub repositories
+                            const mcpServerResponse = await fetch('/generate-mcp-server', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({ 
+                                    session_id: currentSessionId,
+                                    production_base_url: productionBaseUrl || null
+                                })
+                            });
+                            
+                            const mcpServerResult = await mcpServerResponse.json();
+                            
+                            if (mcpServerResult.success) {
+                                console.log('MCP server content generated successfully');
+                                // Update UI to show MCP server generation success
+                                const mcpToolsCard = document.querySelector('.result-card h3');
+                                if (mcpToolsCard) {
+                                    mcpToolsCard.innerHTML = '🛠️ MCP Tools Generated <span style="color: #28a745; font-size: 0.8em;">✓</span>';
+                                }
+                                
+                                // Update MCP server section
+                                updateMCPServerSection(mcpServerResult);
+                                
+                                // Add success message
+                                addMessage(`✅ MCP tools generated successfully! (${result.mcp_tools.length} tools)\n🚀 MCP server content also generated for GitHub repository.`, 'bot');
+                            } else {
+                                console.log('MCP server generation failed:', mcpServerResult.detail);
+                                // Still show success for MCP tools even if server generation failed
+                                addMessage(`✅ MCP tools generated successfully! (${result.mcp_tools.length} tools)\n⚠️ MCP server generation failed: ${mcpServerResult.detail}`, 'bot');
+                            }
+                        } catch (mcpError) {
+                            console.error('Error generating MCP server content:', mcpError);
+                            // Still show success for MCP tools
+                            addMessage(`✅ MCP tools generated successfully! (${result.mcp_tools.length} tools)\n⚠️ MCP server generation error: ${mcpError.message}`, 'bot');
+                        }
+                    } else {
+                        // Regular website (non-GitHub)
+                        addMessage(`✅ MCP tools generated successfully! (${result.mcp_tools.length} tools)`, 'bot');
+                    }
+                    
+                    document.getElementById('chat-section').classList.remove('hidden');
+                    initializeChat();
+                } else {
+                    const errorMsg = result.detail || result.error || 'Unknown error occurred';
+                    alert('Error generating MCP tools: ' + errorMsg);
+                }
+            } catch (error) {
+                console.error('Error generating MCP tools:', error);
+                const errorMsg = error.message || 'Network error occurred';
+                alert('Error: ' + errorMsg);
+            } finally {
+                // Restore button state
+                const generateBtn = document.querySelector('button[onclick="generateMCPTools()"]');
+                generateBtn.textContent = 'Generate MCP Tools';
+                generateBtn.disabled = false;
+            }
+        }
+        
+        function initializeChat() {
+            if (websocket) {
+                websocket.close();
+            }
+            
+            websocket = new WebSocket(`ws://${window.location.host}/chat/${currentSessionId}`);
+            
+            websocket.onopen = function() {
+                console.log('WebSocket connected');
+            };
+            
+            websocket.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                if (data.error) {
+                    addMessage('Error: ' + data.error, 'bot');
+                } else {
+                    addMessage(data.message, 'bot');
+                }
+            };
+            
+            websocket.onerror = function(error) {
+                console.error('WebSocket error:', error);
+                addMessage('Connection error. Please try again.', 'bot');
+            };
+        }
+        
+        function sendMessage() {
+            const input = document.getElementById('chat-input');
+            const message = input.value.trim();
+            
+            if (!message) return;
+            
+            addMessage(message, 'user');
+            input.value = '';
+            
+            if (websocket && websocket.readyState === WebSocket.OPEN) {
+                websocket.send(JSON.stringify({
+                    message: message,
+                    context: {}
+                }));
+            } else {
+                addMessage('Not connected to chat. Please generate MCP tools first.', 'bot');
+            }
+        }
+        
+        function handleChatKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+        
+        function addMessage(message, sender) {
+            const container = document.getElementById('chat-container');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}`;
+            messageDiv.textContent = message;
+            container.appendChild(messageDiv);
+            container.scrollTop = container.scrollHeight;
+        }
+        
+        // Pagination functions
+        function displayEndpointsWithPagination() {
+            const endpointsList = document.getElementById('endpoints-list');
+            const endpointCount = document.getElementById('endpoint-count');
+            const paginationControls = document.getElementById('pagination-controls');
+            const paginationInfo = document.getElementById('pagination-info');
+            const prevBtn = document.getElementById('prev-btn');
+            const nextBtn = document.getElementById('next-btn');
+            
+            // Clear previous content
+            endpointsList.innerHTML = '';
+            
+            if (allEndpoints.length === 0) {
+                endpointsList.innerHTML = '<li>No API endpoints found</li>';
+                endpointCount.textContent = '0 endpoints found';
+                paginationControls.style.display = 'none';
+                return;
+            }
+            
+            // Update endpoint count
+            endpointCount.textContent = `${allEndpoints.length} endpoints found`;
+            
+            // Create filters
+            createEndpointFilters();
+            
+            // Get filtered endpoints
+            const filteredEndpoints = filterEndpoints(allEndpoints, currentFilter);
+            
+            // Calculate pagination
+            const totalPages = Math.ceil(filteredEndpoints.length / endpointsPerPage);
+            const startIndex = currentPage * endpointsPerPage;
+            const endIndex = Math.min(startIndex + endpointsPerPage, filteredEndpoints.length);
+            const currentEndpoints = filteredEndpoints.slice(startIndex, endIndex);
+            
+            // Display current page endpoints
+            currentEndpoints.forEach(endpoint => {
+                const li = document.createElement('li');
+                li.className = 'endpoint-item';
+                li.innerHTML = `
+                    <div class="endpoint-info">
+                        <span class="endpoint-method">${endpoint.method || 'N/A'}</span>
+                        <span class="endpoint-url">${endpoint.url || endpoint.path || 'N/A'}</span>
+                        ${endpoint.tags ? `<span class="endpoint-tags">${endpoint.tags.join(', ')}</span>` : ''}
+                    </div>
+                `;
+                endpointsList.appendChild(li);
+            });
+            
+            // Update pagination controls
+            if (totalPages > 1) {
+                paginationControls.style.display = 'flex';
+                paginationInfo.textContent = `Page ${currentPage + 1} of ${totalPages} (${startIndex + 1}-${endIndex} of ${filteredEndpoints.length})`;
+                prevBtn.disabled = currentPage === 0;
+                nextBtn.disabled = currentPage === totalPages - 1;
+            } else {
+                paginationControls.style.display = 'none';
+            }
+        }
+        
+        function createEndpointFilters() {
+            const filtersContainer = document.getElementById('endpoint-filters');
+            filtersContainer.innerHTML = '';
+            
+            // Get unique methods
+            const methods = [...new Set(allEndpoints.map(e => e.method).filter(Boolean))];
+            
+            // Add filter buttons
+            const allBtn = document.createElement('button');
+            allBtn.className = `filter-btn ${currentFilter === 'all' ? 'active' : ''}`;
+            allBtn.textContent = `All (${allEndpoints.length})`;
+            allBtn.onclick = () => setFilter('all');
+            filtersContainer.appendChild(allBtn);
+            
+            methods.forEach(method => {
+                const count = allEndpoints.filter(e => e.method === method).length;
+                const btn = document.createElement('button');
+                btn.className = `filter-btn ${currentFilter === method ? 'active' : ''}`;
+                btn.textContent = `${method} (${count})`;
+                btn.onclick = () => setFilter(method);
+                filtersContainer.appendChild(btn);
+            });
+        }
+        
+        function setFilter(filter) {
+            currentFilter = filter;
+            currentPage = 0;
+            displayEndpointsWithPagination();
+        }
+        
+        function filterEndpoints(endpoints, filter) {
+            if (filter === 'all') {
+                return endpoints;
+            }
+            return endpoints.filter(endpoint => endpoint.method === filter);
+        }
+        
+        function previousPage() {
+            if (currentPage > 0) {
+                currentPage--;
+                displayEndpointsWithPagination();
+            }
+        }
+        
+        function nextPage() {
+            const filteredEndpoints = filterEndpoints(allEndpoints, currentFilter);
+            const totalPages = Math.ceil(filteredEndpoints.length / endpointsPerPage);
+            if (currentPage < totalPages - 1) {
+                currentPage++;
+                displayEndpointsWithPagination();
+            }
+        }
+        
+        // MCP Server Management Functions
+        async function viewMCPServerContent() {
+            const currentUrl = document.getElementById('website-url').value;
+            if (!currentUrl || !currentUrl.includes('github.com')) {
+                alert('MCP server content is only available for GitHub repositories');
+                return;
+            }
+            
+            try {
+                // Extract repo name from URL
+                const urlParts = currentUrl.split('/');
+                const repoName = `${urlParts[urlParts.length - 2]}_${urlParts[urlParts.length - 1]}`;
+                
+                // First try to get existing content
+                let response = await fetch(`/mcp-server/${repoName}`);
+                let result = await response.json();
+                
+                // If content doesn't exist, generate it first
+                if (!result.success && response.status === 404) {
+                    console.log('MCP server content not found, generating...');
+                    
+                    // Get current session to generate MCP server
+                    if (!currentSessionId) {
+                        alert('Please analyze the repository first before viewing MCP server content');
+                        return;
+                    }
+                    
+                    // Generate MCP server content
+                    const productionBaseUrl = document.getElementById('production-base-url').value || '';
+                    const generateResponse = await fetch('/generate-mcp-server', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            session_id: currentSessionId,
+                            production_base_url: productionBaseUrl
+                        })
+                    });
+                    
+                    if (!generateResponse.ok) {
+                        throw new Error('Failed to generate MCP server content');
+                    }
+                    
+                    const generateResult = await generateResponse.json();
+                    if (!generateResult.success) {
+                        throw new Error(generateResult.detail || 'Failed to generate MCP server');
+                    }
+                    
+                    // Now try to get the content again
+                    response = await fetch(`/mcp-server/${repoName}`);
+                    result = await response.json();
+                }
+                
+                if (result.success) {
+                    const mcpContent = result.mcp_content;
+                    
+                    // Create a modal or new window to display the content
+                    const modal = document.createElement('div');
+                    modal.style.cssText = `
+                        position: fixed;
+                        top: 0;
+                        left: 0;
+                        width: 100%;
+                        height: 100%;
+                        background: rgba(0,0,0,0.8);
+                        z-index: 1000;
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                        padding: 20px;
+                    `;
+                    
+                    const content = document.createElement('div');
+                    content.style.cssText = `
+                        background: white;
+                        border-radius: 10px;
+                        padding: 30px;
+                        max-width: 90%;
+                        max-height: 90%;
+                        overflow-y: auto;
+                        position: relative;
+                    `;
+                    
+                    content.innerHTML = `
+                        <h2>🚀 MCP Server Content for ${mcpContent.repo_name}</h2>
+                        <p><strong>GitHub URL:</strong> ${mcpContent.github_url}</p>
+                        <p><strong>Generated:</strong> ${new Date(mcpContent.generated_at).toLocaleString()}</p>
+                        <p><strong>Endpoints:</strong> ${mcpContent.endpoints_count}</p>
+                        <p><strong>Tools:</strong> ${mcpContent.tools_count}</p>
+                        
+                        <h3>📝 Python Code</h3>
+                        <pre style="background: #f5f5f5; padding: 15px; border-radius: 5px; overflow-x: auto; font-size: 12px;">${mcpContent.python_code}</pre>
+                        
+                        <h3>📦 Requirements.txt</h3>
+                        <pre style="background: #f5f5f5; padding: 15px; border-radius: 5px; overflow-x: auto; font-size: 12px;">${mcpContent.requirements_txt_content || 'Requirements.txt content not available'}</pre>
+                        
+                        <h3>🐳 Dockerfile</h3>
+                        <pre style="background: #f5f5f5; padding: 15px; border-radius: 5px; overflow-x: auto; font-size: 12px;">${mcpContent.dockerfile_content}</pre>
+                        
+                        <button onclick="this.parentElement.parentElement.remove()" style="position: absolute; top: 10px; right: 10px; background: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer;">✕</button>
+                    `;
+                    
+                    modal.appendChild(content);
+                    document.body.appendChild(modal);
+                    
+                    // Close modal when clicking outside
+                    modal.addEventListener('click', (e) => {
+                        if (e.target === modal) {
+                            modal.remove();
+                        }
+                    });
+                } else {
+                    alert('Error retrieving MCP server content: ' + result.detail);
+                }
+            } catch (error) {
+                console.error('Error viewing MCP server content:', error);
+                alert('Error: ' + error.message);
+            }
+        }
+        
+        async function listAllMCPServers() {
+            try {
+                const response = await fetch('/mcp-servers');
+                const result = await response.json();
+                
+                if (result.success) {
+                    const servers = result.servers;
+                    
+                    if (servers.length === 0) {
+                        alert('No MCP servers have been generated yet.');
+                        return;
+                    }
+                    
+                    // Create a modal to display the list
+                    const modal = document.createElement('div');
+                    modal.style.cssText = `
+                        position: fixed;
+                        top: 0;
+                        left: 0;
+                        width: 100%;
+                        height: 100%;
+                        background: rgba(0,0,0,0.8);
+                        z-index: 1000;
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                        padding: 20px;
+                    `;
+                    
+                    const content = document.createElement('div');
+                    content.style.cssText = `
+                        background: white;
+                        border-radius: 10px;
+                        padding: 30px;
+                        max-width: 600px;
+                        max-height: 80%;
+                        overflow-y: auto;
+                        position: relative;
+                    `;
+                    
+                    let serversList = '';
+                    servers.forEach((server, index) => {
+                        serversList += `
+                            <div style="padding: 10px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center;">
+                                <span>${index + 1}. ${server}</span>
+                                <button onclick="viewSpecificMCPServer('${server}')" style="background: #007bff; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer;">View</button>
+                            </div>
+                        `;
+                    });
+                    
+                    content.innerHTML = `
+                        <h2>📋 Available MCP Servers (${servers.length})</h2>
+                        <div style="margin-top: 20px;">
+                            ${serversList}
+                        </div>
+                        <button onclick="this.parentElement.parentElement.remove()" style="position: absolute; top: 10px; right: 10px; background: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer;">✕</button>
+                    `;
+                    
+                    modal.appendChild(content);
+                    document.body.appendChild(modal);
+                    
+                    // Close modal when clicking outside
+                    modal.addEventListener('click', (e) => {
+                        if (e.target === modal) {
+                            modal.remove();
+                        }
+                    });
+                } else {
+                    alert('Error listing MCP servers: ' + result.detail);
+                }
+            } catch (error) {
+                console.error('Error listing MCP servers:', error);
+                alert('Error: ' + error.message);
+            }
+        }
+        
+        async function viewSpecificMCPServer(repoName) {
+            try {
+                const response = await fetch(`/mcp-server/${repoName}`);
+                const result = await response.json();
+                
+                if (result.success) {
+                    const mcpContent = result.mcp_content;
+                    
+                    // Create a modal to display the content
+                    const modal = document.createElement('div');
+                    modal.style.cssText = `
+                        position: fixed;
+                        top: 0;
+                        left: 0;
+                        width: 100%;
+                        height: 100%;
+                        background: rgba(0,0,0,0.8);
+                        z-index: 1000;
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                        padding: 20px;
+                    `;
+                    
+                    const content = document.createElement('div');
+                    content.style.cssText = `
+                        background: white;
+                        border-radius: 10px;
+                        padding: 30px;
+                        max-width: 90%;
+                        max-height: 90%;
+                        overflow-y: auto;
+                        position: relative;
+                    `;
+                    
+                    content.innerHTML = `
+                        <h2>🚀 MCP Server Content for ${mcpContent.repo_name}</h2>
+                        <p><strong>GitHub URL:</strong> ${mcpContent.github_url}</p>
+                        <p><strong>Generated:</strong> ${new Date(mcpContent.generated_at).toLocaleString()}</p>
+                        <p><strong>Endpoints:</strong> ${mcpContent.endpoints_count}</p>
+                        <p><strong>Tools:</strong> ${mcpContent.tools_count}</p>
+                        
+                        <h3>📝 Python Code</h3>
+                        <pre style="background: #f5f5f5; padding: 15px; border-radius: 5px; overflow-x: auto; font-size: 12px;">${mcpContent.python_code}</pre>
+                        
+                        <h3>📦 Requirements.txt</h3>
+                        <pre style="background: #f5f5f5; padding: 15px; border-radius: 5px; overflow-x: auto; font-size: 12px;">${mcpContent.requirements_txt_content || 'Requirements.txt content not available'}</pre>
+                        
+                        <h3>🐳 Dockerfile</h3>
+                        <pre style="background: #f5f5f5; padding: 15px; border-radius: 5px; overflow-x: auto; font-size: 12px;">${mcpContent.dockerfile_content}</pre>
+                        
+                        <button onclick="this.parentElement.parentElement.remove()" style="position: absolute; top: 10px; right: 10px; background: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer;">✕</button>
+                    `;
+                    
+                    modal.appendChild(content);
+                    document.body.appendChild(modal);
+                    
+                    // Close modal when clicking outside
+                    modal.addEventListener('click', (e) => {
+                        if (e.target === modal) {
+                            modal.remove();
+                        }
+                    });
+                } else {
+                    alert('Error retrieving MCP server content: ' + result.detail);
+                }
+            } catch (error) {
+                console.error('Error viewing MCP server content:', error);
+                alert('Error: ' + error.message);
+            }
+        }
+        
+        // Function to update MCP server section display
+        function updateMCPServerSection(mcpServerData) {
+            const mcpServerSection = document.getElementById('mcp-server-section');
+            const statusElement = document.getElementById('mcp-server-status');
+            const repoElement = document.getElementById('mcp-server-repo');
+            const timeElement = document.getElementById('mcp-server-time');
+            const viewBtn = document.getElementById('view-mcp-server-btn');
+            const downloadBtn = document.getElementById('download-mcp-files-btn');
+            
+            if (mcpServerData && mcpServerData.success) {
+                const mcpContent = mcpServerData.mcp_content;
+                statusElement.textContent = 'Generated successfully';
+                statusElement.style.color = '#28a745';
+                repoElement.textContent = mcpContent.repo_name;
+                timeElement.textContent = new Date(mcpContent.generated_at).toLocaleString();
+                viewBtn.style.display = 'inline-block';
+                downloadBtn.style.display = 'inline-block';
+                mcpServerSection.style.display = 'block';
+            } else {
+                statusElement.textContent = 'Not generated';
+                statusElement.style.color = '#6c757d';
+                repoElement.textContent = '-';
+                timeElement.textContent = '-';
+                viewBtn.style.display = 'none';
+                downloadBtn.style.display = 'none';
+                mcpServerSection.style.display = 'none';
+            }
+        }
+        
+        // Function to download MCP files
+        async function downloadMCPFiles() {
+            if (!currentSessionId) {
+                alert('Please analyze a GitHub repository first');
+                return;
+            }
+            
+            const currentUrl = document.getElementById('website-url').value;
+            if (!currentUrl || !currentUrl.includes('github.com')) {
+                alert('Download is only available for GitHub repositories');
+                return;
+            }
+            
+            try {
+                // Show loading state
+                const downloadBtn = document.getElementById('download-mcp-files-btn');
+                const originalText = downloadBtn.textContent;
+                downloadBtn.textContent = 'Downloading...';
+                downloadBtn.disabled = true;
+                
+                // Make the download request
+                const response = await fetch('/download-mcp-files', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ session_id: currentSessionId })
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'Download failed');
+                }
+                
+                // Get the filename from the response headers
+                const contentDisposition = response.headers.get('content-disposition');
+                let filename = 'mcp_server_files.zip';
+                if (contentDisposition) {
+                    const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+                    if (filenameMatch) {
+                        filename = filenameMatch[1];
+                    }
+                }
+                
+                // Create blob and download
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+                // Show success message
+                addMessage(`✅ MCP server files downloaded successfully! (${filename})`, 'bot');
+                
+            } catch (error) {
+                console.error('Error downloading MCP files:', error);
+                alert('Error downloading files: ' + error.message);
+            } finally {
+                // Restore button state
+                const downloadBtn = document.getElementById('download-mcp-files-btn');
+                downloadBtn.textContent = 'Download Files';
+                downloadBtn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>
