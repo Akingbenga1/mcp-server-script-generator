@@ -101,7 +101,7 @@ class AIAgent:
     def __init__(self, ollama_base_url: str = None, model_name: str = None):
         # Use environment variables if not provided
         self.ollama_base_url = ollama_base_url or os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-        self.model_name = model_name or os.getenv("OLLAMA_MODEL", "llama3.1:latest")
+        self.model_name = model_name or os.getenv("OLLAMA_MODEL_NAME", "llama3.1:latest")
         self.llm = None
         self.agent_executor = None
         self.memory = ConversationBufferMemory(

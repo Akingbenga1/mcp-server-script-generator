@@ -18,7 +18,7 @@ class Chatbot:
         self.ai_agent: Optional[AIAgent] = None
         # Use environment variables if not provided
         self.ollama_base_url = ollama_base_url or os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-        self.model_name = model_name or os.getenv("OLLAMA_MODEL", "gemma3:1b")
+        self.model_name = model_name or os.getenv("OLLAMA_MODEL_NAME", "gemma3:1b")
         
     async def initialize(self, api_discovery: APIDiscovery, mcp_tools: List[MCPTool]):
         """Initialize chatbot with API discovery and MCP tools"""

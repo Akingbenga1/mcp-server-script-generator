@@ -3,3 +3,4 @@ websitemcp/
 data/
 ARTICLE.md
 logs/
+.env
