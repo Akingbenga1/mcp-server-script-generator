@@ -88,6 +88,43 @@ class Chatbot:
                 message=f"I encountered an error while processing your request: {str(e)}. Please try again or rephrase your request.",
                 confidence=0.1
             )
+
+    async def process_message_streaming(self, message: str, session_id: str, context: Dict[str, Any] = None):
+        """Process a user message using the AI agent with streaming response"""
+        try:
+            logger.info(f"=== CHATBOT STREAMING MESSAGE PROCESSING ===")
+            logger.info(f"Session ID: {session_id}")
+            logger.info(f"User Message: {message}")
+            logger.info(f"Context: {context}")
+            
+            if not self.ai_agent:
+                logger.warning("AI Agent not initialized - returning error response")
+                yield {
+                    'type': 'error',
+                    'content': "Chatbot not initialized. Please generate MCP tools first.",
+                    'session_id': session_id
+                }
+                return
+            
+            # Process message through AI agent with streaming
+            logger.info("Forwarding message to AI Agent for streaming...")
+            async for chunk in self.ai_agent.process_message_streaming(message, context):
+                # Add session_id to each chunk for tracking
+                chunk['session_id'] = session_id
+                yield chunk
+            
+        except Exception as e:
+            logger.error(f"=== CHATBOT STREAMING ERROR ===")
+            logger.error(f"Error processing streaming message: {e}")
+            logger.error(f"Session ID: {session_id}")
+            logger.error(f"User Message: {message}")
+            logger.error(f"Context: {context}")
+            yield {
+                'type': 'error',
+                'content': f"I encountered an error while processing your request: {str(e)}. Please try again or rephrase your request.",
+                'session_id': session_id,
+                'error': str(e)
+            }
     
     async def close(self):
         """Close the chatbot session"""

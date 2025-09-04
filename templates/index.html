@@ -231,6 +231,30 @@
             100% { transform: rotate(360deg); }
         }
         
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+        
+        .streaming-message {
+            position: relative;
+        }
+        
+        .streaming-content {
+            min-height: 20px;
+        }
+        
+        .typing-indicator {
+            display: inline-block;
+            margin-left: 2px;
+        }
+        
+        .message-metadata {
+            border-top: 1px solid #eee;
+            padding-top: 8px;
+            margin-top: 8px;
+        }
+        
         .hidden {
             display: none;
         }
@@ -365,7 +389,7 @@
                         <h2>⚙️ MCP Server Configuration</h2>
                         <div class="input-group">
                             <label for="production-base-url">Production API Base URL:</label>
-                            <input type="url" id="production-base-url" placeholder="https://api.example.com/v1" value="">
+                            <input type="url" id="production-base-url" placeholder="https://api.example.com/v1" value="https://api.myapp.com/v1">
                         </div>
                         <div class="help-text">
                             <p><strong>Production Base URL:</strong> The base URL for the production API that the generated MCP server will call. This will replace placeholder URLs in the generated tools.</p>
@@ -731,9 +755,20 @@
             
             websocket.onmessage = function(event) {
                 const data = JSON.parse(event.data);
+                
                 if (data.error) {
                     addMessage('Error: ' + data.error, 'bot');
+                } else if (data.type === 'chunk') {
+                    // Handle streaming chunk
+                    handleStreamingChunk(data);
+                } else if (data.type === 'complete') {
+                    // Handle streaming completion
+                    handleStreamingComplete(data);
+                } else if (data.type === 'error') {
+                    // Handle streaming error
+                    addMessage('Error: ' + data.content, 'bot');
                 } else {
+                    // Legacy non-streaming response
                     addMessage(data.message, 'bot');
                 }
             };
@@ -756,7 +791,8 @@
             if (websocket && websocket.readyState === WebSocket.OPEN) {
                 websocket.send(JSON.stringify({
                     message: message,
-                    context: {}
+                    context: {},
+                    streaming: true  // Enable streaming by default
                 }));
             } else {
                 addMessage('Not connected to chat. Please generate MCP tools first.', 'bot');
@@ -776,6 +812,85 @@
             messageDiv.textContent = message;
             container.appendChild(messageDiv);
             container.scrollTop = container.scrollHeight;
+        }
+
+        // Streaming response handling
+        let currentStreamingMessage = null;
+        
+        function handleStreamingChunk(data) {
+            if (!currentStreamingMessage) {
+                // Create new streaming message
+                currentStreamingMessage = createStreamingMessage();
+            }
+            
+            // Append chunk content
+            currentStreamingMessage.content.textContent += data.content;
+            
+            // Scroll to bottom
+            const container = document.getElementById('chat-container');
+            container.scrollTop = container.scrollHeight;
+        }
+        
+        function handleStreamingComplete(data) {
+            if (currentStreamingMessage) {
+                // Mark streaming as complete
+                currentStreamingMessage.content.classList.remove('streaming');
+                currentStreamingMessage.content.classList.add('complete');
+                
+                // Add completion metadata if available
+                if (data.metadata) {
+                    const metadataDiv = document.createElement('div');
+                    metadataDiv.className = 'message-metadata';
+                    metadataDiv.style.cssText = 'font-size: 12px; color: #666; margin-top: 5px; font-style: italic;';
+                    
+                    const metadataText = [];
+                    if (data.metadata.response_time) {
+                        metadataText.push(`Response time: ${data.metadata.response_time.toFixed(2)}s`);
+                    }
+                    if (data.metadata.model) {
+                        metadataText.push(`Model: ${data.metadata.model}`);
+                    }
+                    if (data.metadata.tools_mentioned && data.metadata.tools_mentioned.length > 0) {
+                        metadataText.push(`Tools mentioned: ${data.metadata.tools_mentioned.join(', ')}`);
+                    }
+                    
+                    if (metadataText.length > 0) {
+                        metadataDiv.textContent = metadataText.join(' • ');
+                        currentStreamingMessage.content.appendChild(metadataDiv);
+                    }
+                }
+                
+                currentStreamingMessage = null;
+            }
+        }
+        
+        function createStreamingMessage() {
+            const container = document.getElementById('chat-container');
+            
+            // Create message container
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message bot streaming-message';
+            
+            // Create content div
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'streaming-content';
+            contentDiv.style.cssText = 'display: inline-block;';
+            
+            // Add typing indicator
+            const typingIndicator = document.createElement('span');
+            typingIndicator.className = 'typing-indicator';
+            typingIndicator.innerHTML = '▋';
+            typingIndicator.style.cssText = 'animation: blink 1s infinite; color: #667eea; font-weight: bold;';
+            
+            contentDiv.appendChild(typingIndicator);
+            messageDiv.appendChild(contentDiv);
+            container.appendChild(messageDiv);
+            
+            return {
+                container: messageDiv,
+                content: contentDiv,
+                typingIndicator: typingIndicator
+            };
         }
         
         // Pagination functions

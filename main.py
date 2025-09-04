@@ -294,7 +294,7 @@ async def generate_mcp_tools(request: Request):
 
 @app.websocket("/chat/{session_id}")
 async def chat_websocket(websocket: WebSocket, session_id: str):
-    """WebSocket endpoint for chatbot interaction"""
+    """WebSocket endpoint for chatbot interaction with streaming support"""
     await websocket.accept()
     
     try:
@@ -311,36 +311,49 @@ async def chat_websocket(websocket: WebSocket, session_id: str):
             data = await websocket.receive_text()
             message_data = json.loads(data)
             
-            # Process message through chatbot
-            response = await chatbot.process_message(
-                message_data["message"],
-                session_id,
-                message_data.get("context", {})
-            )
+            # Check if streaming is requested
+            use_streaming = message_data.get("streaming", True)  # Default to streaming
             
-            # Send response back to client - serialize ChatbotResponse object
-            if hasattr(response, 'model_dump'):
-                # If it's a Pydantic model, convert to dict (Pydantic v2)
-                response_data = response.model_dump()
-            elif hasattr(response, 'dict'):
-                # If it's a Pydantic model, convert to dict (Pydantic v1)
-                response_data = response.dict()
+            if use_streaming:
+                # Process message through chatbot with streaming
+                async for chunk in chatbot.process_message_streaming(
+                    message_data["message"],
+                    session_id,
+                    message_data.get("context", {})
+                ):
+                    # Send each chunk to the client
+                    await websocket.send_text(json.dumps(chunk))
             else:
-                # If it's already a dict or other serializable type
-                response_data = response
-            
-            # Custom JSON encoder to handle datetime and other non-serializable types
-            class CustomJSONEncoder(json.JSONEncoder):
-                def default(self, obj):
-                    if hasattr(obj, 'isoformat'):  # datetime objects
-                        return obj.isoformat()
-                    elif hasattr(obj, 'value'):  # enum values
-                        return obj.value
-                    elif hasattr(obj, '__dict__'):  # other objects
-                        return obj.__dict__
-                    return super().default(obj)
+                # Process message through chatbot without streaming (legacy mode)
+                response = await chatbot.process_message(
+                    message_data["message"],
+                    session_id,
+                    message_data.get("context", {})
+                )
                 
-            await websocket.send_text(json.dumps(response_data, cls=CustomJSONEncoder))
+                # Send response back to client - serialize ChatbotResponse object
+                if hasattr(response, 'model_dump'):
+                    # If it's a Pydantic model, convert to dict (Pydantic v2)
+                    response_data = response.model_dump()
+                elif hasattr(response, 'dict'):
+                    # If it's a Pydantic model, convert to dict (Pydantic v1)
+                    response_data = response.dict()
+                else:
+                    # If it's already a dict or other serializable type
+                    response_data = response
+                
+                # Custom JSON encoder to handle datetime and other non-serializable types
+                class CustomJSONEncoder(json.JSONEncoder):
+                    def default(self, obj):
+                        if hasattr(obj, 'isoformat'):  # datetime objects
+                            return obj.isoformat()
+                        elif hasattr(obj, 'value'):  # enum values
+                            return obj.value
+                        elif hasattr(obj, '__dict__'):  # other objects
+                            return obj.__dict__
+                        return super().default(obj)
+                    
+                await websocket.send_text(json.dumps(response_data, cls=CustomJSONEncoder))
             
     except WebSocketDisconnect:
         logger.info(f"WebSocket disconnected for session {session_id}")

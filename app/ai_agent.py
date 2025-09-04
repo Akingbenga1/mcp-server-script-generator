@@ -278,6 +278,85 @@ Please analyze this request and provide a conversational response. If you need t
                 message=f"I encountered an error while processing your request: {str(e)}. Please try again.",
                 confidence=0.1
             )
+
+    async def process_message_streaming(self, message: str, context: Dict[str, Any] = None):
+        """Process a user message using the AI agent with streaming response"""
+        try:
+            # Update context
+            if context:
+                self.user_context.update(context)
+                logger.info(f"Updated user context: {self.user_context}")
+            
+            # Create a simple prompt with the message and available tools
+            tools_description = "\n".join([f"- {tool.name}: {tool.description}" for tool in self.tools])
+            
+            prompt = f"""{self.system_prompt}
+
+USER REQUEST: {message}
+
+Please analyze this request and provide a conversational response. If you need to use a tool, explain why you chose it and what it does. If no tool is suitable, explain why and suggest alternatives."""
+            
+            # Log the prompt being sent to LLM
+            logger.info(f"=== LLM STREAMING REQUEST ===")
+            logger.info(f"User Message: {message}")
+            logger.info(f"Available Tools: {len(self.tools)} tools")
+            logger.info(f"User Context: {self.user_context}")
+            logger.info(f"Prompt Length: {len(prompt)} characters")
+            
+            # Get streaming response from LLM
+            logger.info("Sending streaming request to Ollama LLM...")
+            start_time = asyncio.get_event_loop().time()
+            
+            # Use streaming API
+            full_response = ""
+            async for chunk in self.llm.astream(prompt):
+                if chunk:
+                    chunk_text = str(chunk)
+                    full_response += chunk_text
+                    yield {
+                        'type': 'chunk',
+                        'content': chunk_text,
+                        'is_complete': False
+                    }
+            
+            end_time = asyncio.get_event_loop().time()
+            response_time = end_time - start_time
+            
+            # Log the complete response
+            logger.info(f"=== LLM STREAMING COMPLETE ===")
+            logger.info(f"Response Time: {response_time:.2f} seconds")
+            logger.info(f"Response Length: {len(full_response)} characters")
+            logger.info(f"Model Used: {self.llm.model}")
+            
+            # Log any tool usage detected in response
+            tools_mentioned = []
+            for tool in self.tools:
+                if tool.name.lower() in full_response.lower():
+                    tools_mentioned.append(tool.name)
+            
+            if tools_mentioned:
+                logger.info(f"Tools mentioned in response: {tools_mentioned}")
+            
+            # Send completion signal
+            yield {
+                'type': 'complete',
+                'content': full_response,
+                'metadata': {
+                    'response_time': response_time,
+                    'model': self.llm.model,
+                    'temperature': self.llm.temperature,
+                    'tools_mentioned': tools_mentioned
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"=== LLM STREAMING ERROR ===")
+            logger.error(f"Error in AI agent streaming: {e}")
+            yield {
+                'type': 'error',
+                'content': f"I encountered an error while processing your request: {str(e)}. Please try again.",
+                'error': str(e)
+            }
     
     async def _handle_authentication(self, response_text: str):
         """Handle authentication tokens from responses"""
