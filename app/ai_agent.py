@@ -1,6 +1,7 @@
 import json
 import logging
 import aiohttp
+import os
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 import asyncio
@@ -97,9 +98,10 @@ class MCPToolWrapper(BaseTool):
 class AIAgent:
     """AI Agent powered by Ollama with conversational MCP tool execution"""
     
-    def __init__(self, ollama_base_url: str = "http://localhost:11434", model_name: str = "llama3.1:latest"):
-        self.ollama_base_url = ollama_base_url
-        self.model_name = model_name
+    def __init__(self, ollama_base_url: str = None, model_name: str = None):
+        # Use environment variables if not provided
+        self.ollama_base_url = ollama_base_url or os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+        self.model_name = model_name or os.getenv("OLLAMA_MODEL", "llama3.1:latest")
         self.llm = None
         self.agent_executor = None
         self.memory = ConversationBufferMemory(

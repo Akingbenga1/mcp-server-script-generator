@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
@@ -11,12 +12,13 @@ logger = logging.getLogger(__name__)
 class Chatbot:
     """AI-powered chatbot using Ollama with Mistral 7B and LangChain agents"""
     
-    def __init__(self, ollama_base_url: str = "http://localhost:11434", model_name: str = "gemma3:1b"):
+    def __init__(self, ollama_base_url: str = None, model_name: str = None):
         self.api_discovery: Optional[APIDiscovery] = None
         self.mcp_tools: List[MCPTool] = []
         self.ai_agent: Optional[AIAgent] = None
-        self.ollama_base_url = ollama_base_url
-        self.model_name = model_name
+        # Use environment variables if not provided
+        self.ollama_base_url = ollama_base_url or os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+        self.model_name = model_name or os.getenv("OLLAMA_MODEL", "gemma3:1b")
         
     async def initialize(self, api_discovery: APIDiscovery, mcp_tools: List[MCPTool]):
         """Initialize chatbot with API discovery and MCP tools"""

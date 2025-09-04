@@ -30,8 +30,11 @@ load_dotenv()
 import logging.config
 import os
 
-# Create logs directory if it doesn't exist
+# Create required directories if they don't exist
 os.makedirs('logs', exist_ok=True)
+os.makedirs('data', exist_ok=True)
+os.makedirs('data/mcp_servers', exist_ok=True)
+os.makedirs('static', exist_ok=True)
 
 # Configure logging
 logging_config = {
@@ -680,10 +683,11 @@ async def test_endpoint():
     }
 
 if __name__ == "__main__":
+    port = int(os.getenv("PORT", "8080"))
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=8080,
+        port=port,
         reload=True,
         log_level="info"
     )

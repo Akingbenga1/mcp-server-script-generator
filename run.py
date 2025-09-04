@@ -59,18 +59,19 @@ def main():
     os.makedirs('logs', exist_ok=True)
     
     print("\nStarting FastAPI server...")
-    print("Access the application at: http://localhost:8001")
-    print("API documentation at: http://localhost:8001/docs")
+    print("Access the application at: http://localhost:8080")
+    print("API documentation at: http://localhost:8080/docs")
     print("Press Ctrl+C to stop the server")
     print("=" * 50)
     
     try:
         # Start the server
+        port = os.getenv("PORT", "8080")
         subprocess.run([
             sys.executable, "-m", "uvicorn", 
             "main:app", 
             "--host", "0.0.0.0", 
-            "--port", "8080",
+            "--port", port,
             "--reload"
         ])
     except KeyboardInterrupt:
