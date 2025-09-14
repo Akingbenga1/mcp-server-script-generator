@@ -705,20 +705,26 @@ async def download_mcp_files(request: Request):
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
         
-        # Only download for GitHub repositories
-        if 'github.com' not in session.url:
-            raise HTTPException(status_code=400, detail="MCP server download only available for GitHub repositories")
-        
-        # Get MCP content
-        repo_name = session.url.split('/')[-2] + '_' + session.url.split('/')[-1]
-        mcp_content = mcp_server_generator.get_mcp_content(repo_name)
-        
-        # Check if content needs regeneration or doesn't exist
-        if not mcp_content or mcp_content.get('needs_regeneration') or not mcp_content.get('python_code'):
-            logger.info(f"Generating MCP content for download: {repo_name}")
-            # Get production base URL from request if provided
+        # Generate MCP content based on session type
+        if 'github.com' in session.url:
+            # GitHub repository
+            repo_name = session.url.split('/')[-2] + '_' + session.url.split('/')[-1]
+            mcp_content = mcp_server_generator.get_mcp_content(repo_name)
+            
+            # Check if content needs regeneration or doesn't exist
+            if not mcp_content or mcp_content.get('needs_regeneration') or not mcp_content.get('python_code'):
+                logger.info(f"Generating MCP content for download: {repo_name}")
+                # Get production base URL from request if provided
+                production_base_url = body.get('production_base_url')
+                mcp_content = mcp_server_generator.generate_mcp_server_content(session.url, session.api_discovery, production_base_url)
+        elif session.url.startswith('pdf://'):
+            # PDF document
+            logger.info(f"Generating MCP content for PDF: {session.url}")
             production_base_url = body.get('production_base_url')
-            mcp_content = mcp_server_generator.generate_mcp_server_content(session.url, session.api_discovery, production_base_url)
+            pdf_filename = session.url.replace('pdf://', '')
+            mcp_content = mcp_server_generator.generate_mcp_server_content_from_pdf(pdf_filename, session.api_discovery, production_base_url)
+        else:
+            raise HTTPException(status_code=400, detail="MCP server download only available for GitHub repositories and PDF documents")
         
         if not mcp_content or not mcp_content.get('python_code'):
             raise HTTPException(status_code=500, detail="Failed to generate MCP server content")
@@ -773,6 +779,122 @@ async def download_mcp_files(request: Request):
         logger.error(f"Error downloading MCP files: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/generate-mcp-from-pdf")
+async def generate_mcp_from_pdf(
+    file: UploadFile = File(...),
+    extractor_type: str = Form("pypdf"),
+    parser_type: str = Form("openapi"),
+    production_base_url: str = Form(None)
+):
+    """
+    Upload PDF API documentation and generate MCP server files (mcp_server.py, requirements.txt, Dockerfile).
+    This is the main endpoint for the PDF-to-MCP generation feature.
+    """
+    try:
+        logger.info(f"Generating MCP server from PDF: {file.filename}")
+        
+        # Validate file
+        if not file.filename.lower().endswith('.pdf'):
+            raise HTTPException(status_code=400, detail="Only PDF files are supported")
+        
+        # Create temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
+            content = await file.read()
+            temp_file.write(content)
+            temp_file_path = temp_file.name
+        
+        try:
+            # Create analysis service
+            analysis_service = PDFAnalysisFactory.create_analysis_service(
+                extractor_type=extractor_type,
+                parser_type=parser_type
+            )
+            
+            # Analyze PDF
+            result = await analysis_service.analyze_pdf(temp_file_path)
+            
+            # Convert to existing format
+            analysis = await analysis_service.convert_to_website_analysis(temp_file_path, result)
+            api_discovery = await analysis_service.convert_to_api_discovery(temp_file_path, result)
+            
+            # Check if any endpoints were found
+            if not api_discovery.endpoints:
+                logger.warning(f"No API endpoints found in PDF: {file.filename}")
+                return {
+                    "success": False,
+                    "error": "No API endpoints found in the PDF. Please ensure the PDF contains API documentation with endpoint definitions.",
+                    "pdf_analysis": {
+                        "endpoints_found": 0,
+                        "extraction_method": result.metadata['extraction_method'],
+                        "parser_method": result.metadata['parser_method'],
+                        "page_count": result.metadata['page_count'],
+                        "text_length": result.metadata['text_length']
+                    }
+                }
+            
+            # Store analysis results
+            session_id = database.create_session(f"pdf://{file.filename}", analysis, api_discovery)
+            
+            # Generate MCP server content from PDF
+            mcp_content = mcp_server_generator.generate_mcp_server_content_from_pdf(
+                file.filename, api_discovery, production_base_url
+            )
+            
+            # Create temporary directory for files
+            with tempfile.TemporaryDirectory() as temp_dir:
+                temp_path = Path(temp_dir)
+                
+                # Create mcp_server.py
+                mcp_server_file = temp_path / "mcp_server.py"
+                with open(mcp_server_file, 'w', encoding='utf-8') as f:
+                    f.write(mcp_content['python_code'])
+                
+                # Create requirements.txt
+                requirements_file = temp_path / "requirements.txt"
+                with open(requirements_file, 'w', encoding='utf-8') as f:
+                    f.write(mcp_content['requirements_txt_content'])
+                
+                # Create Dockerfile
+                dockerfile = temp_path / "Dockerfile"
+                with open(dockerfile, 'w', encoding='utf-8') as f:
+                    f.write(mcp_content['dockerfile_content'])
+                
+                # Create zip file in memory
+                zip_filename = f"{mcp_content['repo_name']}_mcp_server.zip"
+                
+                import io
+                zip_buffer = io.BytesIO()
+                
+                with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                    zipf.write(mcp_server_file, "mcp_server.py")
+                    zipf.write(requirements_file, "requirements.txt")
+                    zipf.write(dockerfile, "Dockerfile")
+                
+                # Get the zip content
+                zip_content = zip_buffer.getvalue()
+                zip_buffer.close()
+                
+                # Return the zip file as a response
+                return Response(
+                    content=zip_content,
+                    media_type='application/zip',
+                    headers={
+                        'Content-Disposition': f'attachment; filename="{zip_filename}"'
+                    }
+                )
+        
+        finally:
+            # Clean up temporary PDF file
+            os.unlink(temp_file_path)
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating MCP server from PDF: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Error processing PDF: {str(e)}")
+
 @app.get("/test")
 async def test_endpoint():
     """Test endpoint for demonstration"""
@@ -782,6 +904,8 @@ async def test_endpoint():
             "health": "/health",
             "analyze": "/analyze-website",
             "analyze_github": "/analyze-github",
+            "analyze_pdf": "/analyze-pdf",
+            "generate_mcp_from_pdf": "/generate-mcp-from-pdf",
             "generate_tools": "/generate-mcp-tools",
             "mcp_servers": "/mcp-servers",
             "mcp_server": "/mcp-server/{repo_name}",
@@ -793,6 +917,8 @@ async def test_endpoint():
         "example_usage": {
             "analyze_website": "POST /analyze-website with form data: url=https://example.com",
             "analyze_github": "POST /analyze-github with form data: repo_url=https://github.com/owner/repo",
+            "analyze_pdf": "POST /analyze-pdf with form data: file=@document.pdf",
+            "generate_mcp_from_pdf": "POST /generate-mcp-from-pdf with form data: file=@api_doc.pdf (returns zip with 3 files)",
             "generate_tools": "POST /generate-mcp-tools with JSON: {\"session_id\": \"your-session-id\"}",
             "download_mcp_files": "POST /download-mcp-files with JSON: {\"session_id\": \"your-session-id\"}",
             "chat": "WebSocket connection to /chat/{session_id}"
