@@ -599,6 +599,318 @@ pydantic>=2.0.0
             logger.error(f"Error retrieving MCP content for {repo_name}: {e}")
             return None
     
+    def generate_mcp_server_content_from_pdf(self, pdf_filename: str, api_discovery: APIDiscovery, production_base_url: str = None) -> Dict[str, Any]:
+        """Generate MCP server Python code and Dockerfile content from PDF API documentation"""
+        try:
+            # Extract a clean name from the PDF filename for the server
+            pdf_name = Path(pdf_filename).stem
+            # Clean the name to make it suitable for Python/server naming
+            clean_name = re.sub(r'[^a-zA-Z0-9_]', '_', pdf_name).lower()
+            server_name = f"pdf_{clean_name}"
+            
+            # Generate Python code in FastMCP style
+            python_code = self._generate_fastmcp_python_code_for_pdf(server_name, pdf_filename, api_discovery, production_base_url)
+            
+            # Generate Dockerfile
+            dockerfile_content = self._generate_dockerfile_for_pdf(server_name)
+            
+            # Generate requirements.txt for FastMCP
+            requirements_txt_content = self._generate_fastmcp_requirements()
+            
+            # Create content dictionary
+            mcp_content = {
+                "repo_name": server_name,
+                "source_file": pdf_filename,
+                "python_code": python_code,
+                "dockerfile_content": dockerfile_content,
+                "requirements_txt_content": requirements_txt_content,
+                "generated_at": datetime.now().isoformat(),
+                "endpoints_count": len(api_discovery.endpoints),
+                "tools_count": len(api_discovery.endpoints) + 4,  # +4 for generic HTTP methods
+                "production_base_url": production_base_url,
+                "framework": "FastMCP",
+                "source_type": "PDF"
+            }
+            
+            # Save to file
+            self._save_mcp_content(server_name, mcp_content)
+            
+            logger.info(f"Generated FastMCP server from PDF with {mcp_content['tools_count']} tools")
+            return mcp_content
+            
+        except Exception as e:
+            logger.error(f"Error generating MCP server content from PDF: {e}")
+            raise e
+
+    def _generate_fastmcp_python_code_for_pdf(self, server_name: str, pdf_filename: str, api_discovery: APIDiscovery, production_base_url: str = None) -> str:
+        """Generate Python code for MCP server from PDF in FastMCP style"""
+        logger.info(f"Generating FastMCP-style code for PDF {pdf_filename} with {len(api_discovery.endpoints)} endpoints")
+        
+        # Generate server description
+        server_description = self._generate_server_description_for_pdf(server_name, pdf_filename, api_discovery, production_base_url)
+        
+        # Generate endpoint-specific tools
+        endpoint_tools = []
+        for endpoint in api_discovery.endpoints:
+            tool_code = self._generate_fastmcp_tool(endpoint, production_base_url)
+            endpoint_tools.append(tool_code)
+        
+        # Generate tool summary for main section
+        tool_summary = self._generate_tool_summary(api_discovery.endpoints)
+        
+        # Use the production base URL or fallback to API discovery base URL
+        base_url = production_base_url if production_base_url else (api_discovery.base_url or 'https://api.example.com')
+        if base_url.startswith('pdf://'):
+            base_url = 'https://api.example.com'  # Replace PDF URL with placeholder
+        
+        python_code = f'''#!/usr/bin/env python3
+"""
+{server_description}
+"""
+
+from fastmcp import FastMCP
+import aiohttp
+import asyncio
+import json
+from typing import Dict, List, Optional, Any
+
+# Initialize the MCP server with FastMCP framework
+mcp = FastMCP(name="{server_name.replace('_', ' ').title()} MCP Server")
+
+# Base URL for the API
+BASE_URL = "{base_url}"
+
+async def make_request(method: str, url: str, data: Dict[str, Any] = None, headers: Dict[str, str] = None) -> Dict[str, Any]:
+    """
+    Helper function to make HTTP requests with comprehensive error handling.
+    
+    Args:
+        method: HTTP method (GET, POST, PUT, DELETE)
+        url: Target URL for the request
+        data: Optional request body data
+        headers: Optional request headers
+        
+    Returns:
+        Dictionary containing status_code, data, and success flag
+    """
+    async with aiohttp.ClientSession() as session:
+        try:
+            if method.upper() == "GET":
+                async with session.get(url, headers=headers) as response:
+                    return {{
+                        "status_code": response.status,
+                        "data": await response.json() if response.content_type == 'application/json' else await response.text(),
+                        "success": 200 <= response.status < 300,
+                        "headers": dict(response.headers)
+                    }}
+            elif method.upper() == "POST":
+                async with session.post(url, json=data, headers=headers) as response:
+                    return {{
+                        "status_code": response.status,
+                        "data": await response.json() if response.content_type == 'application/json' else await response.text(),
+                        "success": 200 <= response.status < 300,
+                        "headers": dict(response.headers)
+                    }}
+            elif method.upper() == "PUT":
+                async with session.put(url, json=data, headers=headers) as response:
+                    return {{
+                        "status_code": response.status,
+                        "data": await response.json() if response.content_type == 'application/json' else await response.text(),
+                        "success": 200 <= response.status < 300,
+                        "headers": dict(response.headers)
+                    }}
+            elif method.upper() == "DELETE":
+                async with session.delete(url, headers=headers) as response:
+                    return {{
+                        "status_code": response.status,
+                        "data": await response.json() if response.content_type == 'application/json' else await response.text(),
+                        "success": 200 <= response.status < 300,
+                        "headers": dict(response.headers)
+                    }}
+            else:
+                return {{
+                    "status_code": 405,
+                    "data": f"Unsupported method: {{method}}",
+                    "success": False
+                }}
+        except Exception as e:
+            return {{
+                "status_code": 500,
+                "data": f"Request failed: {{str(e)}}",
+                "success": False,
+                "error": str(e)
+            }}
+
+# Generic HTTP method tools for flexibility
+@mcp.tool
+def post_request(url: str, data: Dict[str, Any] = None, headers: Dict[str, str] = None) -> Dict[str, Any]:
+    """
+    Make a POST request to the API.
+    
+    This is a generic POST request tool that can be used for any endpoint.
+    For specific endpoints, use the dedicated tools below.
+    
+    Args:
+        url: The full URL for the POST request
+        data: Optional data to send in the request body
+        headers: Optional headers for the request (e.g., {{"Authorization": "Bearer token"}})
+        
+    Returns:
+        Response data including status_code, data, and success flag
+    """
+    return asyncio.run(make_request("POST", url, data, headers))
+
+@mcp.tool
+def get_request(url: str, headers: Dict[str, str] = None) -> Dict[str, Any]:
+    """
+    Make a GET request to the API.
+    
+    This is a generic GET request tool that can be used for any endpoint.
+    For specific endpoints, use the dedicated tools below.
+    
+    Args:
+        url: The full URL for the GET request
+        headers: Optional headers for the request (e.g., {{"Authorization": "Bearer token"}})
+        
+    Returns:
+        Response data including status_code, data, and success flag
+    """
+    return asyncio.run(make_request("GET", url, None, headers))
+
+@mcp.tool
+def put_request(url: str, data: Dict[str, Any] = None, headers: Dict[str, str] = None) -> Dict[str, Any]:
+    """
+    Make a PUT request to the API.
+    
+    This is a generic PUT request tool that can be used for any endpoint.
+    For specific endpoints, use the dedicated tools below.
+    
+    Args:
+        url: The full URL for the PUT request
+        data: Optional data to send in the request body
+        headers: Optional headers for the request (e.g., {{"Authorization": "Bearer token"}})
+        
+    Returns:
+        Response data including status_code, data, and success flag
+    """
+    return asyncio.run(make_request("PUT", url, data, headers))
+
+@mcp.tool
+def delete_request(url: str, headers: Dict[str, str] = None) -> Dict[str, Any]:
+    """
+    Make a DELETE request to the API.
+    
+    This is a generic DELETE request tool that can be used for any endpoint.
+    For specific endpoints, use the dedicated tools below.
+    
+    Args:
+        url: The full URL for the DELETE request
+        headers: Optional headers for the request (e.g., {{"Authorization": "Bearer token"}})
+        
+    Returns:
+        Response data including status_code, data, and success flag
+    """
+    return asyncio.run(make_request("DELETE", url, None, headers))
+
+# Endpoint-specific tools generated from PDF API documentation
+# Total endpoint-specific tools: {len(api_discovery.endpoints)}
+{"\n".join(endpoint_tools) if endpoint_tools else "# No endpoint-specific tools generated"}
+
+if __name__ == "__main__":
+    print(f"""
+{'='*60}
+{server_name.replace('_', ' ').title()} MCP Server
+Generated from PDF API Documentation: {pdf_filename}
+Using FastMCP Framework Style
+{'='*60}
+
+Base URL: {{BASE_URL}}
+Available Tools ({len(api_discovery.endpoints) + 4} total):
+- Generic HTTP Methods (4): post_request, get_request, put_request, delete_request
+- Endpoint-specific Tools ({len(api_discovery.endpoints)}):
+{tool_summary}
+
+All endpoint-specific tools are automatically generated with:
+- Type-safe parameters based on PDF API documentation analysis
+- Proper parameter source detection (path, query, header, body)
+- Comprehensive error handling and response processing
+
+Starting server with HTTP transport...
+{'='*60}
+""")
+    
+    # Run the server with HTTP transport
+    mcp.run(transport="http", port=8000, host="0.0.0.0")'''
+
+        logger.info(f"Generated FastMCP server code from PDF with {len(api_discovery.endpoints)} endpoints")
+        return python_code
+
+    def _generate_server_description_for_pdf(self, server_name: str, pdf_filename: str, api_discovery: APIDiscovery, production_base_url: str = None) -> str:
+        """Generate comprehensive server description for PDF-generated server"""
+        base_url = production_base_url or "API"
+        if base_url.startswith('pdf://'):
+            base_url = "API"
+        
+        return f"""MCP Server for {server_name.replace('_', ' ').title()}
+Generated automatically from PDF API documentation: {pdf_filename}
+Using enhanced parameter extraction from PDF content.
+
+This server provides Model Context Protocol (MCP) tools for interacting with the API documented in the PDF.
+Each endpoint has been analyzed and extracted from the PDF to create proper parameter types, sources, and validation rules.
+
+FEATURES:
+- Automatic parameter detection from PDF documentation (path, query, header, cookie, form, body)
+- Type-safe parameter handling with validation
+- Comprehensive error handling and response processing
+- FastMCP framework for optimal performance
+- Production-ready with configurable base URL
+
+SOURCE: {pdf_filename}
+BASE URL: {base_url}
+ENDPOINTS: {len(api_discovery.endpoints)} API endpoints extracted from PDF
+TOOLS: {len(api_discovery.endpoints) + 4} total tools available
+
+USAGE:
+Each endpoint is available as both a specific tool (with parameter validation) and via generic HTTP methods.
+Use specific tools for type safety, or generic methods for flexibility.
+
+AUTHENTICATION:
+Include authentication headers in the 'headers' parameter of any tool call.
+Example: {{"Authorization": "Bearer your-token-here"}}
+
+Generated with enhanced PDF API documentation extraction technology."""
+
+    def _generate_dockerfile_for_pdf(self, server_name: str) -> str:
+        """Generate Dockerfile content for PDF-generated FastMCP server"""
+        return f'''# Dockerfile for FastMCP Server - {server_name} (Generated from PDF)
+FROM python:3.11-slim
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \\
+    gcc \\
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements and install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the MCP server code
+COPY . .
+
+# Expose the port
+EXPOSE 8000
+
+# Set environment variables
+ENV PYTHONPATH=/app
+ENV MCP_SERVER_PORT=8000
+
+# Run the MCP server
+CMD ["python", "-m", "mcp_server"]
+'''
+
     def list_mcp_servers(self) -> List[Dict[str, Any]]:
         """List all available MCP servers"""
         try:
