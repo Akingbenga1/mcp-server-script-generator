@@ -463,6 +463,52 @@
                         
                         <div id="pdfResults" class="results-container" style="display: none; margin-top: 20px; background: rgba(255, 255, 255, 0.1); padding: 15px; border-radius: 8px;"></div>
                     </div>
+                    
+                    <!-- PDF to MCP Generation Form -->
+                    <div class="form-section" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white;">
+                        <h2 style="color: white;">🚀 Generate MCP Server from PDF</h2>
+                        <p style="color: rgba(255, 255, 255, 0.9);">Upload a PDF containing API documentation and instantly download 3 files: mcp_server.py, requirements.txt, and Dockerfile</p>
+                        
+                        <div class="input-group">
+                            <label for="mcpPdfFile" style="color: white;">Select PDF File:</label>
+                            <input type="file" id="mcpPdfFile" accept=".pdf" style="background: rgba(255, 255, 255, 0.1); border: 2px solid rgba(255, 255, 255, 0.3); color: white;">
+                        </div>
+                        
+                        <div class="input-group">
+                            <label for="mcpProductionUrl" style="color: white;">Production API Base URL (optional):</label>
+                            <input type="url" id="mcpProductionUrl" placeholder="https://api.example.com/v1" style="background: rgba(255, 255, 255, 0.1); border: 2px solid rgba(255, 255, 255, 0.3); color: white;">
+                        </div>
+                        
+                        <div style="display: flex; gap: 15px; margin-bottom: 20px;">
+                            <div style="flex: 1;">
+                                <label for="mcpExtractorType" style="color: white;">Extractor:</label>
+                                <select id="mcpExtractorType" style="background: rgba(255, 255, 255, 0.1); border: 2px solid rgba(255, 255, 255, 0.3); color: white; width: 100%; padding: 8px; border-radius: 5px;">
+                                    <option value="pypdf">PyPDF2 (Faster)</option>
+                                    <option value="pdfplumber">PDFPlumber (More Accurate)</option>
+                                </select>
+                            </div>
+                            <div style="flex: 1;">
+                                <label for="mcpParserType" style="color: white;">Parser:</label>
+                                <select id="mcpParserType" style="background: rgba(255, 255, 255, 0.1); border: 2px solid rgba(255, 255, 255, 0.3); color: white; width: 100%; padding: 8px; border-radius: 5px;">
+                                    <option value="openapi">OpenAPI/Swagger</option>
+                                    <option value="markdown">Markdown Documentation</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <button class="btn" onclick="generateMCPFromPDF()" style="background: rgba(255, 255, 255, 0.2); border: 2px solid rgba(255, 255, 255, 0.3); font-weight: bold;">
+                            📦 Generate & Download MCP Server Files
+                        </button>
+                        
+                        <div class="help-text" style="background: rgba(255, 255, 255, 0.1); border-left: 4px solid rgba(255, 255, 255, 0.5);">
+                            <p style="color: rgba(255, 255, 255, 0.9);"><strong>What you'll get:</strong></p>
+                            <p style="color: rgba(255, 255, 255, 0.8);">• <strong>mcp_server.py</strong> - Complete FastMCP server with API endpoints</p>
+                            <p style="color: rgba(255, 255, 255, 0.8);">• <strong>requirements.txt</strong> - All Python dependencies</p>
+                            <p style="color: rgba(255, 255, 255, 0.8);">• <strong>Dockerfile</strong> - Ready-to-deploy container configuration</p>
+                        </div>
+                        
+                        <div id="mcpGenerationStatus" style="display: none; margin-top: 15px; padding: 10px; background: rgba(255, 255, 255, 0.1); border-radius: 5px;"></div>
+                    </div>
             
             <!-- Loading Indicator -->
             <div class="loading" id="loading">
@@ -1436,6 +1482,122 @@
                 const downloadBtn = document.getElementById('download-mcp-files-btn');
                 downloadBtn.textContent = 'Download Files';
                 downloadBtn.disabled = false;
+            }
+        }
+        
+        // Function to generate MCP server files from PDF
+        async function generateMCPFromPDF() {
+            const fileInput = document.getElementById('mcpPdfFile');
+            const productionUrl = document.getElementById('mcpProductionUrl').value.trim();
+            const extractorType = document.getElementById('mcpExtractorType').value;
+            const parserType = document.getElementById('mcpParserType').value;
+            const statusDiv = document.getElementById('mcpGenerationStatus');
+            
+            if (!fileInput.files.length) {
+                alert('Please select a PDF file');
+                return;
+            }
+            
+            const file = fileInput.files[0];
+            if (!file.name.toLowerCase().endsWith('.pdf')) {
+                alert('Please select a PDF file');
+                return;
+            }
+            
+            try {
+                // Show loading state
+                const generateBtn = document.querySelector('button[onclick="generateMCPFromPDF()"]');
+                const originalText = generateBtn.textContent;
+                generateBtn.textContent = '🔄 Processing PDF...';
+                generateBtn.disabled = true;
+                
+                // Show status
+                statusDiv.style.display = 'block';
+                statusDiv.innerHTML = `
+                    <div style="text-align: center;">
+                        <div style="display: inline-block; width: 20px; height: 20px; border: 2px solid rgba(255,255,255,0.3); border-top: 2px solid white; border-radius: 50%; animation: spin 1s linear infinite; margin-right: 10px;"></div>
+                        Processing ${file.name}...
+                    </div>
+                `;
+                
+                // Create form data
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('extractor_type', extractorType);
+                formData.append('parser_type', parserType);
+                if (productionUrl) {
+                    formData.append('production_base_url', productionUrl);
+                }
+                
+                // Make the request
+                const response = await fetch('/generate-mcp-from-pdf', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'Generation failed');
+                }
+                
+                // Check if response is JSON (error) or binary (success)
+                const contentType = response.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    const errorData = await response.json();
+                    if (!errorData.success) {
+                        throw new Error(errorData.error || 'No API endpoints found in PDF');
+                    }
+                }
+                
+                // Get the filename from the response headers
+                const contentDisposition = response.headers.get('content-disposition');
+                let filename = `${file.name.replace('.pdf', '')}_mcp_server.zip`;
+                if (contentDisposition) {
+                    const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+                    if (filenameMatch) {
+                        filename = filenameMatch[1];
+                    }
+                }
+                
+                // Create blob and download
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+                // Show success message
+                statusDiv.innerHTML = `
+                    <div style="text-align: center; color: #28a745;">
+                        ✅ Success! Downloaded ${filename}
+                        <br>
+                        <small>Contains: mcp_server.py, requirements.txt, Dockerfile</small>
+                    </div>
+                `;
+                
+                // Reset form
+                fileInput.value = '';
+                
+            } catch (error) {
+                console.error('Error generating MCP from PDF:', error);
+                
+                // Show error message
+                statusDiv.innerHTML = `
+                    <div style="text-align: center; color: #dc3545;">
+                        ❌ Error: ${error.message}
+                        <br>
+                        <small>Please ensure the PDF contains API documentation with endpoint definitions.</small>
+                    </div>
+                `;
+            } finally {
+                // Restore button state
+                const generateBtn = document.querySelector('button[onclick="generateMCPFromPDF()"]');
+                generateBtn.textContent = '📦 Generate & Download MCP Server Files';
+                generateBtn.disabled = false;
             }
         }
     </script>
