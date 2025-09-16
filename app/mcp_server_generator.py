@@ -436,18 +436,11 @@ Generated with enhanced parameter extraction technology."""
         
         # Generate URL construction
         if production_base_url:
-            url_base = f'"{production_base_url.rstrip("/")}"'
+            # For production URLs, use direct string concatenation
+            url_construction = f'url = "{production_base_url.rstrip("/")}{endpoint.url}"'
         else:
-            url_base = 'BASE_URL'
-            
-        # Build URL with path parameters
-        url_template = endpoint.url
-        if hasattr(endpoint, 'parameters') and endpoint.parameters:
-            for param_name, param_info in endpoint.parameters.items():
-                if param_info.get('source') == 'path':
-                    url_template = url_template.replace(f'{{{param_name}}}', f'{{{param_name}}}')
-        
-        url_construction = f'url = f"{url_base}{url_template}"'
+            # For BASE_URL, use f-string with variable
+            url_construction = f'url = f"{{BASE_URL}}{endpoint.url}"'
         
         # Generate data preparation for body parameters
         data_prep_lines = []
