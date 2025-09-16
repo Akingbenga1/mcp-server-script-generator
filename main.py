@@ -16,6 +16,7 @@ import logging
 from app.website_analyzer import WebsiteAnalyzer
 from app.api_discoverer import APIDiscoverer
 from app.github_analyzer import GitHubAnalyzer
+from app.pdf_analyzer import PDFAnalyzer
 from app.mcp_server import MCPServer
 from app.mcp_server_generator import MCPServerGenerator
 from app.chatbot import Chatbot
@@ -115,6 +116,7 @@ templates = Jinja2Templates(directory="templates")
 website_analyzer = WebsiteAnalyzer()
 api_discoverer = APIDiscoverer()
 github_analyzer = GitHubAnalyzer()
+pdf_analyzer = PDFAnalyzer()
 mcp_server = MCPServer()
 mcp_server_generator = MCPServerGenerator()
 
@@ -473,6 +475,76 @@ async def analyze_github_repository_endpoint(repo_url: str = Form(...)):
         logger.error(f"Error analyzing GitHub repository: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/analyze-pdf")
+async def analyze_pdf_endpoint(
+    pdf_file: UploadFile = File(...),
+    api_name: str = Form(default=""),
+    base_url: str = Form(default="")
+):
+    """Analyze a PDF file containing API documentation"""
+    try:
+        logger.info(f"Analyzing PDF file: {pdf_file.filename}")
+        
+        # Validate file type
+        if not pdf_file.filename.lower().endswith('.pdf'):
+            raise HTTPException(status_code=400, detail="Only PDF files are supported")
+        
+        # Read PDF content
+        pdf_content = await pdf_file.read()
+        
+        if not pdf_content:
+            raise HTTPException(status_code=400, detail="Empty PDF file")
+        
+        logger.info(f"PDF file size: {len(pdf_content)} bytes")
+        
+        # Analyze PDF with our PDF analyzer
+        api_discovery = await pdf_analyzer.analyze_pdf(pdf_content, pdf_file.filename)
+        
+        # Override base URL if provided
+        if base_url.strip():
+            api_discovery.base_url = base_url.strip()
+        
+        # Create a mock website analysis for the PDF
+        display_name = api_name.strip() or Path(pdf_file.filename).stem
+        analysis = WebsiteAnalysis(
+            url=f"pdf://{pdf_file.filename}",
+            title=f"{display_name} API Documentation",
+            description=f"API documentation extracted from {pdf_file.filename}",
+            pages=[],
+            forms=[],
+            api_endpoints=[],
+            javascript_files=[],
+            css_files=[],
+            external_apis=[]
+        )
+        
+        # Store analysis results
+        session_id = database.create_session(f"pdf://{pdf_file.filename}", analysis, api_discovery)
+        
+        logger.info(f"PDF analysis completed: {len(api_discovery.endpoints)} endpoints found")
+        
+        return {
+            "success": True,
+            "session_id": session_id,
+            "analysis": analysis.model_dump() if hasattr(analysis, 'model_dump') else analysis.dict(),
+            "api_discovery": api_discovery.model_dump() if hasattr(api_discovery, 'model_dump') else api_discovery.dict(),
+            "pdf_analysis": {
+                "filename": pdf_file.filename,
+                "file_size": len(pdf_content),
+                "endpoints_found": len(api_discovery.endpoints),
+                "base_url": api_discovery.base_url,
+                "authentication": api_discovery.authentication,
+                "schemas_found": len(api_discovery.schemas)
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error analyzing PDF: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"PDF analysis failed: {str(e)}")
+
 @app.get("/mcp-servers")
 async def list_mcp_servers():
     """List all available MCP servers"""
@@ -565,9 +637,9 @@ async def generate_mcp_server_for_session(request: Request):
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
         
-        # Only generate for GitHub repositories
-        if 'github.com' not in session.url:
-            raise HTTPException(status_code=400, detail="MCP server generation only available for GitHub repositories")
+        # Generate for GitHub repositories and PDF uploads
+        if 'github.com' not in session.url and not session.url.startswith('pdf://'):
+            raise HTTPException(status_code=400, detail="MCP server generation available for GitHub repositories and PDF uploads only")
         
         if not session.api_discovery.endpoints:
             raise HTTPException(status_code=400, detail="No API endpoints found in session")
@@ -601,12 +673,19 @@ async def download_mcp_files(request: Request):
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
         
-        # Only download for GitHub repositories
-        if 'github.com' not in session.url:
-            raise HTTPException(status_code=400, detail="MCP server download only available for GitHub repositories")
+        # Download for GitHub repositories and PDF uploads
+        if 'github.com' not in session.url and not session.url.startswith('pdf://'):
+            raise HTTPException(status_code=400, detail="MCP server download available for GitHub repositories and PDF uploads only")
         
         # Get MCP content
-        repo_name = session.url.split('/')[-2] + '_' + session.url.split('/')[-1]
+        if session.url.startswith('pdf://'):
+            # For PDF files, use the filename (without .pdf extension)
+            pdf_filename = session.url.replace('pdf://', '')
+            repo_name = Path(pdf_filename).stem.replace(' ', '_').replace('-', '_')
+        else:
+            # For GitHub repositories
+            repo_name = session.url.split('/')[-2] + '_' + session.url.split('/')[-1]
+        
         mcp_content = mcp_server_generator.get_mcp_content(repo_name)
         
         # Check if content needs regeneration or doesn't exist
@@ -673,11 +752,12 @@ async def download_mcp_files(request: Request):
 async def test_endpoint():
     """Test endpoint for demonstration"""
     return {
-        "message": "Website MCP Chatbot is running!",
+        "message": "Website MCP Chatbot with PDF Support is running!",
         "endpoints": {
             "health": "/health",
             "analyze": "/analyze-website",
             "analyze_github": "/analyze-github",
+            "analyze_pdf": "/analyze-pdf",
             "generate_tools": "/generate-mcp-tools",
             "mcp_servers": "/mcp-servers",
             "mcp_server": "/mcp-server/{repo_name}",
@@ -689,9 +769,17 @@ async def test_endpoint():
         "example_usage": {
             "analyze_website": "POST /analyze-website with form data: url=https://example.com",
             "analyze_github": "POST /analyze-github with form data: repo_url=https://github.com/owner/repo",
+            "analyze_pdf": "POST /analyze-pdf with multipart form: pdf_file=<file>, api_name=MyAPI, base_url=https://api.example.com",
             "generate_tools": "POST /generate-mcp-tools with JSON: {\"session_id\": \"your-session-id\"}",
             "download_mcp_files": "POST /download-mcp-files with JSON: {\"session_id\": \"your-session-id\"}",
             "chat": "WebSocket connection to /chat/{session_id}"
+        },
+        "features": {
+            "pdf_analysis": "Upload PDF API documentation and automatically extract endpoints",
+            "mcp_generation": "Generate MCP server files (mcp_server.py, requirements.txt, Dockerfile)",
+            "multi_source": "Support for websites, GitHub repositories, and PDF documents",
+            "ai_chat": "Chat interface with generated MCP tools integration",
+            "testing": "Built-in testing framework via 'python run.py'"
         }
     }
 

@@ -397,7 +397,7 @@
                         </div>
                     </div>
 
-                                <!-- Website Analysis Form -->
+                    <!-- Website Analysis Form -->
                     <div class="form-section">
                         <h2>🔍 Analyze Website or GitHub Repository</h2>
                         <div class="input-group">
@@ -411,6 +411,31 @@
                         <div class="help-text">
                             <p><strong>Website Analysis:</strong> Crawls websites to find API endpoints, forms, and documentation</p>
                             <p><strong>GitHub Analysis:</strong> Analyzes public repositories for API code, OpenAPI specs, and documentation</p>
+                        </div>
+                    </div>
+
+                    <!-- PDF Analysis Form -->
+                    <div class="form-section">
+                        <h2>📄 Analyze PDF API Documentation</h2>
+                        <div class="input-group">
+                            <label for="pdf-file">Upload PDF File:</label>
+                            <input type="file" id="pdf-file" accept=".pdf" required>
+                        </div>
+                        <div class="input-group">
+                            <label for="api-name">API Name (Optional):</label>
+                            <input type="text" id="api-name" placeholder="My API" value="">
+                        </div>
+                        <div class="input-group">
+                            <label for="pdf-base-url">API Base URL (Optional):</label>
+                            <input type="url" id="pdf-base-url" placeholder="https://api.example.com/v1" value="">
+                        </div>
+                        <div class="button-group">
+                            <button class="btn" onclick="analyzePDF()">📄 Analyze PDF</button>
+                        </div>
+                        <div class="help-text">
+                            <p><strong>PDF Analysis:</strong> Upload a PDF containing API documentation to automatically extract endpoints and generate MCP server files</p>
+                            <p><strong>Supported formats:</strong> REST API docs, OpenAPI specs, and other API documentation in PDF format</p>
+                            <p><strong>File size limit:</strong> Up to 50MB PDF files are supported</p>
                         </div>
                     </div>
             
@@ -562,6 +587,63 @@
                 document.getElementById('loading').classList.remove('show');
             }
         }
+
+        async function analyzePDF() {
+            const fileInput = document.getElementById('pdf-file');
+            const apiName = document.getElementById('api-name').value;
+            const baseUrl = document.getElementById('pdf-base-url').value;
+            
+            if (!fileInput.files || fileInput.files.length === 0) {
+                alert('Please select a PDF file');
+                return;
+            }
+            
+            const pdfFile = fileInput.files[0];
+            
+            if (!pdfFile.name.toLowerCase().endsWith('.pdf')) {
+                alert('Please select a valid PDF file');
+                return;
+            }
+            
+            // Check file size (50MB limit)
+            const maxSize = 50 * 1024 * 1024; // 50MB in bytes
+            if (pdfFile.size > maxSize) {
+                alert('File size too large. Maximum allowed size is 50MB.');
+                return;
+            }
+            
+            // Show loading
+            document.getElementById('loading').classList.add('show');
+            document.querySelector('#loading p').textContent = 'Analyzing PDF and extracting API documentation...';
+            
+            try {
+                const formData = new FormData();
+                formData.append('pdf_file', pdfFile);
+                formData.append('api_name', apiName);
+                formData.append('base_url', baseUrl);
+                
+                const response = await fetch('/analyze-pdf', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    currentSessionId = result.session_id;
+                    displayPDFResults(result);
+                    document.getElementById('results-section').classList.remove('hidden');
+                } else {
+                    alert('Error analyzing PDF: ' + result.detail);
+                }
+            } catch (error) {
+                console.error('PDF analysis error:', error);
+                alert('Error: ' + error.message);
+            } finally {
+                document.getElementById('loading').classList.remove('show');
+                document.querySelector('#loading p').textContent = 'Analyzing website and discovering APIs...';
+            }
+        }
         
         function displayGitHubResults(result) {
             const analysis = result.analysis;
@@ -598,6 +680,48 @@
             if (firstCard) {
                 firstCard.parentNode.insertBefore(githubInfo, firstCard.nextSibling);
             }
+        }
+
+        function displayPDFResults(result) {
+            const analysis = result.analysis;
+            const apiDiscovery = result.api_discovery;
+            const pdfAnalysis = result.pdf_analysis;
+            
+            // Display PDF info
+            document.getElementById('website-url-display').textContent = analysis.url;
+            document.getElementById('website-title').textContent = analysis.title || 'N/A';
+            document.getElementById('website-description').textContent = analysis.description || 'N/A';
+            
+            // Store all endpoints for pagination
+            allEndpoints = apiDiscovery.endpoints || [];
+            currentPage = 0;
+            
+            // Display endpoints with pagination
+            displayEndpointsWithPagination();
+            
+            // Add PDF-specific information to the results
+            const pdfInfo = document.createElement('div');
+            pdfInfo.className = 'result-card';
+            pdfInfo.innerHTML = `
+                <h3>📄 PDF Analysis Information</h3>
+                <p><strong>Filename:</strong> ${pdfAnalysis.filename}</p>
+                <p><strong>File Size:</strong> ${(pdfAnalysis.file_size / 1024 / 1024).toFixed(2)} MB</p>
+                <p><strong>Endpoints Found:</strong> ${pdfAnalysis.endpoints_found}</p>
+                <p><strong>Base URL:</strong> ${pdfAnalysis.base_url}</p>
+                <p><strong>Authentication:</strong> ${pdfAnalysis.authentication ? JSON.stringify(pdfAnalysis.authentication) : 'None detected'}</p>
+                <p><strong>Schemas Found:</strong> ${pdfAnalysis.schemas_found}</p>
+            `;
+            
+            // Insert after the first result card
+            const resultsSection = document.getElementById('results-section');
+            const firstCard = resultsSection.querySelector('.result-card');
+            if (firstCard) {
+                firstCard.parentNode.insertBefore(pdfInfo, firstCard.nextSibling);
+            }
+            
+            // Show MCP server section for PDFs (they can generate MCP servers too)
+            const mcpServerSection = document.getElementById('mcp-server-section');
+            mcpServerSection.style.display = 'block';
         }
         
         function displayResults(result) {
