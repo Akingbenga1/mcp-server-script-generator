@@ -1,0 +1,419 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Sample E-commerce API",
+    "version": "2.1.0",
+    "description": "A comprehensive e-commerce API for managing products, users, and orders"
+  },
+  "servers": [
+    {
+      "url": "https://api.ecommerce-sample.com/v2",
+      "description": "Production server"
+    }
+  ],
+  "paths": {
+    "/users": {
+      "get": {
+        "summary": "List all users",
+        "description": "Retrieve a paginated list of users with optional filtering",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {"type": "integer", "default": 1},
+            "description": "Page number for pagination"
+          },
+          {
+            "name": "limit",
+            "in": "query", 
+            "schema": {"type": "integer", "default": 20, "maximum": 100},
+            "description": "Number of items per page"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {"type": "string", "enum": ["active", "inactive", "pending"]},
+            "description": "Filter by user status"
+          }
+        ],
+        "tags": ["users"],
+        "responses": {
+          "200": {
+            "description": "Successfully retrieved users"
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a new user",
+        "description": "Create a new user account with profile information",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "username": {"type": "string", "minLength": 3},
+                  "email": {"type": "string", "format": "email"},
+                  "password": {"type": "string", "minLength": 8},
+                  "first_name": {"type": "string"},
+                  "last_name": {"type": "string"},
+                  "phone": {"type": "string"},
+                  "role": {"type": "string", "enum": ["customer", "admin"], "default": "customer"}
+                },
+                "required": ["username", "email", "password"]
+              }
+            }
+          }
+        },
+        "tags": ["users"],
+        "responses": {
+          "201": {
+            "description": "User created successfully"
+          }
+        }
+      }
+    },
+    "/users/{userId}": {
+      "get": {
+        "summary": "Get user by ID",
+        "description": "Retrieve detailed information about a specific user",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "integer"},
+            "description": "Unique identifier for the user"
+          }
+        ],
+        "tags": ["users"],
+        "responses": {
+          "200": {
+            "description": "User details retrieved successfully"
+          }
+        }
+      },
+      "put": {
+        "summary": "Update user information",
+        "description": "Update user profile and settings",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "integer"}
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "first_name": {"type": "string"},
+                  "last_name": {"type": "string"},
+                  "email": {"type": "string", "format": "email"},
+                  "phone": {"type": "string"},
+                  "status": {"type": "string", "enum": ["active", "inactive"]}
+                }
+              }
+            }
+          }
+        },
+        "tags": ["users"],
+        "responses": {
+          "200": {
+            "description": "User updated successfully"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete user account",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "integer"}
+          }
+        ],
+        "tags": ["users"],
+        "responses": {
+          "204": {
+            "description": "User deleted successfully"
+          }
+        }
+      }
+    },
+    "/products": {
+      "get": {
+        "summary": "List products",
+        "description": "Get a list of products with filtering and pagination",
+        "parameters": [
+          {
+            "name": "category",
+            "in": "query",
+            "schema": {"type": "string"},
+            "description": "Filter by product category"
+          },
+          {
+            "name": "price_min",
+            "in": "query",
+            "schema": {"type": "number"},
+            "description": "Minimum price filter"
+          },
+          {
+            "name": "price_max",
+            "in": "query",
+            "schema": {"type": "number"},
+            "description": "Maximum price filter"
+          },
+          {
+            "name": "in_stock",
+            "in": "query",
+            "schema": {"type": "boolean"},
+            "description": "Filter by stock availability"
+          }
+        ],
+        "tags": ["products"],
+        "responses": {
+          "200": {
+            "description": "Products retrieved successfully"
+          }
+        }
+      },
+      "post": {
+        "summary": "Create new product",
+        "description": "Add a new product to the catalog",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {"type": "string"},
+                  "description": {"type": "string"},
+                  "price": {"type": "number", "minimum": 0},
+                  "category": {"type": "string"},
+                  "stock_quantity": {"type": "integer", "minimum": 0},
+                  "sku": {"type": "string"},
+                  "tags": {"type": "array", "items": {"type": "string"}}
+                },
+                "required": ["name", "price", "category", "sku"]
+              }
+            }
+          }
+        },
+        "tags": ["products"],
+        "responses": {
+          "201": {
+            "description": "Product created successfully"
+          }
+        }
+      }
+    },
+    "/products/{productId}": {
+      "get": {
+        "summary": "Get product details",
+        "parameters": [
+          {
+            "name": "productId",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "integer"}
+          }
+        ],
+        "tags": ["products"],
+        "responses": {
+          "200": {
+            "description": "Product details"
+          }
+        }
+      }
+    },
+    "/orders": {
+      "get": {
+        "summary": "List orders",
+        "description": "Get orders with filtering options",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "query",
+            "schema": {"type": "integer"},
+            "description": "Filter orders by user ID"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {"type": "string", "enum": ["pending", "processing", "shipped", "delivered", "cancelled"]},
+            "description": "Filter by order status"
+          },
+          {
+            "name": "date_from",
+            "in": "query",
+            "schema": {"type": "string", "format": "date"},
+            "description": "Filter orders from this date"
+          }
+        ],
+        "tags": ["orders"],
+        "responses": {
+          "200": {
+            "description": "Orders retrieved successfully"
+          }
+        }
+      },
+      "post": {
+        "summary": "Create new order",
+        "description": "Place a new order",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "user_id": {"type": "integer"},
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "product_id": {"type": "integer"},
+                        "quantity": {"type": "integer", "minimum": 1},
+                        "unit_price": {"type": "number"}
+                      },
+                      "required": ["product_id", "quantity"]
+                    }
+                  },
+                  "shipping_address": {"type": "string"},
+                  "billing_address": {"type": "string"}
+                },
+                "required": ["user_id", "items"]
+              }
+            }
+          }
+        },
+        "tags": ["orders"],
+        "responses": {
+          "201": {
+            "description": "Order created successfully"
+          }
+        }
+      }
+    },
+    "/orders/{orderId}": {
+      "get": {
+        "summary": "Get order details",
+        "parameters": [
+          {
+            "name": "orderId",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "integer"}
+          }
+        ],
+        "tags": ["orders"],
+        "responses": {
+          "200": {
+            "description": "Order details"
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update order status",
+        "parameters": [
+          {
+            "name": "orderId",
+            "in": "path", 
+            "required": true,
+            "schema": {"type": "integer"}
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "status": {"type": "string", "enum": ["pending", "processing", "shipped", "delivered", "cancelled"]},
+                  "tracking_number": {"type": "string"}
+                }
+              }
+            }
+          }
+        },
+        "tags": ["orders"],
+        "responses": {
+          "200": {
+            "description": "Order updated successfully"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      },
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key"
+      }
+    },
+    "schemas": {
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "integer"},
+          "username": {"type": "string"},
+          "email": {"type": "string"},
+          "first_name": {"type": "string"},
+          "last_name": {"type": "string"},
+          "phone": {"type": "string"},
+          "role": {"type": "string"},
+          "status": {"type": "string"},
+          "created_at": {"type": "string", "format": "date-time"},
+          "updated_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "Product": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "integer"},
+          "name": {"type": "string"},
+          "description": {"type": "string"},
+          "price": {"type": "number"},
+          "category": {"type": "string"},
+          "stock_quantity": {"type": "integer"},
+          "sku": {"type": "string"},
+          "tags": {"type": "array", "items": {"type": "string"}},
+          "created_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "Order": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "integer"},
+          "user_id": {"type": "integer"},
+          "total_amount": {"type": "number"},
+          "status": {"type": "string"},
+          "items": {"type": "array"},
+          "shipping_address": {"type": "string"},
+          "billing_address": {"type": "string"},
+          "tracking_number": {"type": "string"},
+          "created_at": {"type": "string", "format": "date-time"}
+        }
+      }
+    }
+  },
+  "security": [
+    {"BearerAuth": []},
+    {"ApiKeyAuth": []}
+  ]
+}
