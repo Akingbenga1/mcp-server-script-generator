@@ -4,3 +4,5 @@ data/
 ARTICLE.md
 logs/
 .env
+look/
+ecosystem.config.js
